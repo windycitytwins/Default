@@ -34,12 +34,13 @@
         <button class="chip" data-sym="BTC-USD">BTC</button>
       </div>
       <select id="rangeSelect" aria-label="Timeframe">
-        <option value="1d">1D · live</option>
-        <option value="5d">5D · intraday</option>
+        <option value="1d">1D · 2-min</option>
+        <option value="5d">5D · 15-min</option>
+        <option value="1mo">1M · 30-min</option>
         <option value="6mo">6M · daily</option>
         <option value="1y" selected>1Y · daily</option>
-        <option value="2y">2Y · daily</option>
         <option value="5y">5Y · weekly</option>
+        <option value="max">Max · monthly</option>
       </select>
     </div>
 
@@ -55,7 +56,26 @@
 
   <main class="layout">
     <section class="chart-pane">
-      <div id="chart" class="chart-host"></div>
+      <div id="sampleBanner" class="sample-banner" style="display:none">
+        ⚠ Showing <b>SAMPLE data — NOT live or real</b>. Start the local server
+        (<code>node server.js</code>) and open <b>http://localhost:8123</b> for real prices.
+      </div>
+      <div class="chart-host">
+        <div id="chart"></div>
+        <div id="chartError" class="chart-error">
+          <div class="err-card">
+            <div class="err-icon">📡</div>
+            <h3 id="errTitle">Couldn’t load data</h3>
+            <p id="errMsg"></p>
+            <p id="errDetail" class="err-detail" style="display:none"></p>
+            <div class="err-actions">
+              <button id="errRetry" class="btn-primary">Retry</button>
+              <button id="errSample" class="btn-ghost">Use sample data (not live)</button>
+            </div>
+            <p class="err-foot">No fabricated data is ever shown as real.</p>
+          </div>
+        </div>
+      </div>
       <div class="chart-footer">
         <span id="dataStatus" class="data-status muted">Loading…</span>
         <span class="live-indicator"><span id="liveDot" class="live-dot" style="display:none"></span><span id="liveText" class="live-text"></span></span>
@@ -118,6 +138,12 @@
           <label class="switch"><input type="checkbox" data-toggle="volume" checked /><span>Volume</span></label>
           <label class="switch"><input type="checkbox" data-toggle="rsi" /><span>RSI (14)</span></label>
           <label class="switch"><input type="checkbox" data-toggle="sr" /><span>Auto support/resistance zones</span></label>
+        </div>
+
+        <div class="control-group">
+          <h3>Data accuracy</h3>
+          <label class="switch"><input type="checkbox" id="adjustedToggle" /><span>Adjusted for splits &amp; dividends</span></label>
+          <p class="ctrl-note">Off = raw prices (matches Yahoo's candles). On = back-adjusted, ideal for long-term comparisons.</p>
         </div>
 
         <button id="resetViewBtn" class="btn-ghost wide">Reset zoom / pan</button>

@@ -20,6 +20,7 @@
     symbol: 'AAPL',
     range: '1y',
     interval: '1d',
+    adjusted: false,
     lessonIdx: 0,
     stepIdx: 0,
     view: 'lessons',
@@ -49,18 +50,65 @@
   }
 
   // ---- data ----------------------------------------------------------------
+  function renderCurrentView() {
+    if (state.view === 'lessons') renderStep();
+    else applyExplore();
+  }
+
   async function loadSymbol(sym) {
     state.symbol = (sym || state.symbol).toUpperCase().trim();
     $('#symbolInput').value = state.symbol;
+    // Opened as a standalone file (no server) → honest sample data + banner.
+    if (location.protocol === 'file:') {
+      useSampleData();
+      save();
+      return;
+    }
+    hideError();
     setStatus('Loading ' + state.symbol + '…', 'muted');
-    const data = await window.MarketData.load(state.symbol, state.range, state.interval);
+    try {
+      const data = await window.MarketData.load(state.symbol, state.range, state.interval, {
+        adjusted: state.adjusted
+      });
+      state.data = data;
+      chart.setData(data);
+      renderHeader();
+      markUpdated(data);
+      renderCurrentView();
+    } catch (err) {
+      showError(err);
+    }
+    save();
+  }
+
+  // Explicit, clearly-labelled sample data — only when the user opts in.
+  function useSampleData() {
+    hideError();
+    const data = window.MarketData.loadDemo(state.symbol, state.range, state.interval);
     state.data = data;
     chart.setData(data);
     renderHeader();
     markUpdated(data);
-    if (state.view === 'lessons') renderStep();
-    else applyExplore();
-    save();
+    renderCurrentView();
+  }
+
+  function showError(err) {
+    const ov = $('#chartError');
+    const isNoServer = err && err.kind === 'no_server';
+    $('#errTitle').textContent = isNoServer ? 'Local data server not reachable' : 'Couldn’t load real data for ' + state.symbol;
+    $('#errMsg').textContent = err && err.message ? err.message : 'Unknown error.';
+    const det = $('#errDetail');
+    if (err && err.detail && err.detail.length) {
+      det.textContent = err.detail.join('  •  ');
+      det.style.display = 'block';
+    } else det.style.display = 'none';
+    ov.classList.add('show');
+    setStatus('No data — real feed unavailable', 'warn');
+    $('#liveDot').style.display = 'none';
+    $('#liveText').textContent = '';
+  }
+  function hideError() {
+    $('#chartError').classList.remove('show');
   }
 
   function renderHeader() {
@@ -92,10 +140,23 @@
 
   // ---- live polling --------------------------------------------------------
   let refreshing = false;
+  const STATE_LABEL = { REGULAR: 'open', PRE: 'pre-market', PREPRE: 'pre-market', POST: 'after-hours', POSTPOST: 'after-hours', CLOSED: 'closed' };
   function markUpdated(data) {
     const live = !data.synthetic;
-    $('#liveDot').style.display = live ? 'inline-block' : 'none';
-    $('#liveText').textContent = live ? 'LIVE · updated ' + new Date().toLocaleTimeString() : '';
+    const banner = $('#sampleBanner');
+    if (banner) banner.style.display = data.synthetic ? 'flex' : 'none';
+    const dot = $('#liveDot');
+    const txt = $('#liveText');
+    if (!live) {
+      dot.style.display = 'none';
+      txt.textContent = '';
+      return;
+    }
+    const ms = data.marketState && STATE_LABEL[data.marketState];
+    const now = new Date().toLocaleTimeString();
+    dot.style.display = 'inline-block';
+    dot.classList.toggle('idle', data.marketState && data.marketState !== 'REGULAR');
+    txt.textContent = ms ? `Market ${ms} · updated ${now}` : `LIVE · updated ${now}`;
   }
   function flashPrice(prev, next) {
     if (next === prev) return;
@@ -105,12 +166,13 @@
     e.classList.add(next > prev ? 'flash-up' : 'flash-down');
   }
   async function refreshLive() {
-    if (refreshing || document.hidden || !state.data) return;
+    // never poll over sample data or while an error is shown
+    if (refreshing || document.hidden || !state.data || state.data.synthetic) return;
     refreshing = true;
     const sym = state.symbol;
     try {
-      // noFallback: on a transient error keep the last good frame instead of demo data
-      const data = await window.MarketData.load(state.symbol, state.range, state.interval, { noFallback: true });
+      // load() throws on any failure, so a transient hiccup keeps the last good frame
+      const data = await window.MarketData.load(state.symbol, state.range, state.interval, { adjusted: state.adjusted });
       if (sym !== state.symbol) return; // user switched symbols mid-fetch
       const prevClose = state.data.candles[state.data.candles.length - 1].close;
       state.data = data;
@@ -316,8 +378,8 @@
     $('#rangeSelect').addEventListener('change', (e) => {
       const v = e.target.value;
       const map = {
-        '1d': ['1d', '2m'], '5d': ['5d', '15m'], '6mo': ['6mo', '1d'],
-        '1y': ['1y', '1d'], '2y': ['2y', '1d'], '5y': ['5y', '1wk']
+        '1d': ['1d', '2m'], '5d': ['5d', '15m'], '1mo': ['1mo', '30m'],
+        '6mo': ['6mo', '1d'], '1y': ['1y', '1d'], '5y': ['5y', '1wk'], 'max': ['max', '1mo']
       };
       [state.range, state.interval] = map[v] || ['1y', '1d'];
       loadSymbol(state.symbol);
@@ -357,6 +419,18 @@
     });
 
     $('#resetViewBtn').addEventListener('click', () => chart.resetView());
+
+    // adjusted-prices toggle (requires a reload)
+    const adj = $('#adjustedToggle');
+    if (adj)
+      adj.addEventListener('change', () => {
+        state.adjusted = adj.checked;
+        loadSymbol(state.symbol);
+      });
+
+    // error overlay actions
+    $('#errRetry').addEventListener('click', () => loadSymbol(state.symbol));
+    $('#errSample').addEventListener('click', useSampleData);
   }
 
   // ---- boot ----------------------------------------------------------------

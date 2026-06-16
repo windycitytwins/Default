@@ -21,10 +21,17 @@ moving averages, volume, and RSI.
   6. ⚡ **Momentum (RSI)** — overbought/oversold, divergence
   7. 🎯 **Putting It Together** — reading with confluence + a final check
 - **An Explore sandbox** — toggle any indicator on any symbol and practise.
-- **Live data with zero setup** — a tiny Node proxy fetches prices from
-  **Yahoo Finance**, falling back to **Stooq**, with **no API key required**.
-  If there's no internet at all, the app still works on realistic offline
-  demo data so the lessons never break.
+- **Real, accurate live & historical data — free, no API key.** A tiny Node
+  proxy fetches prices from **Yahoo Finance** (the same feed behind
+  finance.yahoo.com), with **Stooq** as an accuracy backstop. It uses
+  retries, host rotation and a cookie warm-up to be reliable, and supports
+  **split/dividend-adjusted** prices and **every timeframe** from 1-minute
+  intraday to monthly/max history.
+- **Honest by design.** It **never shows fabricated data as real** — if a
+  fetch fails you get a clear error + Retry, and synthetic "sample data" only
+  appears if you explicitly ask for it (with a loud banner).
+- **Verify it yourself:** `node verify-data.js AAPL` prints the latest bars so
+  you can cross-check against Yahoo/Google.
 
 ## Run it
 

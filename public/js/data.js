@@ -98,27 +98,48 @@
     return Math.round(n * 100) / 100;
   }
 
+  /**
+   * Load REAL market data. Throws a structured error on failure — it never
+   * silently substitutes synthetic data. The caller decides what to do
+   * (retry, or explicitly fall back to clearly-labelled sample data).
+   */
   async function load(symbol, range = '1y', interval = '1d', opts = {}) {
-    const url = `/api/chart?symbol=${encodeURIComponent(symbol)}&range=${encodeURIComponent(
-      range
-    )}&interval=${encodeURIComponent(interval)}`;
+    const params = new URLSearchParams({ symbol, range, interval });
+    if (opts.adjusted) params.set('adjusted', '1');
+    let res, json;
     try {
-      const res = await fetch(url, { headers: { Accept: 'application/json' } });
-      const json = await res.json();
-      if (!res.ok || json.error || !Array.isArray(json.candles) || json.candles.length < 2) {
-        throw new Error(json.message || 'No live data');
-      }
-      return json;
-    } catch (err) {
-      // For live polling we'd rather keep the last good frame than swap to demo.
-      if (opts.noFallback) throw err;
-      // Otherwise: network blocked or provider down → deterministic offline demo data.
-      const demo = synth(symbol, range === '5d' || interval !== '1d' ? 120 : 260);
-      demo.note =
-        'Showing offline demo data — run the local server (node server.js) for live prices.';
-      return demo;
+      res = await fetch('/api/chart?' + params.toString(), { headers: { Accept: 'application/json' } });
+    } catch (netErr) {
+      const e = new Error('no_server');
+      e.kind = 'no_server';
+      e.message =
+        'Can’t reach the local data server. Make sure you started it with ' +
+        '“node server.js” and opened the app at http://localhost:8123 (not by ' +
+        'double-clicking the HTML file).';
+      throw e;
     }
+    try {
+      json = await res.json();
+    } catch (_) {
+      json = {};
+    }
+    if (!res.ok || json.error || !Array.isArray(json.candles) || json.candles.length < 2) {
+      const e = new Error(json.message || 'Could not fetch real market data.');
+      e.kind = json.error || 'upstream';
+      e.detail = json.detail || [];
+      throw e;
+    }
+    return json;
   }
 
-  window.MarketData = { load, synth };
+  /** Explicit, clearly-labelled sample data (offline only — never live). */
+  function loadDemo(symbol, range = '1y', interval = '1d') {
+    const demo = synth(symbol, range === '5d' || range === '1d' || interval !== '1d' ? 130 : 260);
+    demo.source = 'Sample data (NOT live)';
+    demo.synthetic = true;
+    demo.fetchedAt = Date.now();
+    return demo;
+  }
+
+  window.MarketData = { load, loadDemo, synth };
 })();

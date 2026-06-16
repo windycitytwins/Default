@@ -134,7 +134,54 @@ body {
   min-height: 0;
   position: relative;
 }
+#chart { position: absolute; inset: 0; }
 .sc-canvas { display: block; }
+
+/* sample-data warning banner */
+.sample-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  background: repeating-linear-gradient(45deg, #3a2a12, #3a2a12 12px, #43300f 12px, #43300f 24px);
+  color: #ffd9a0;
+  font-size: 12.5px;
+  padding: 7px 14px;
+  border-bottom: 1px solid #5a4012;
+}
+.sample-banner code { background: rgba(0,0,0,0.35); padding: 1px 5px; border-radius: 4px; }
+
+/* error / no-data overlay */
+.chart-error {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 14, 23, 0.86);
+  backdrop-filter: blur(2px);
+  z-index: 5;
+}
+.chart-error.show { display: flex; }
+.err-card {
+  max-width: 440px;
+  text-align: center;
+  padding: 26px 28px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+.err-icon { font-size: 34px; }
+.err-card h3 { margin: 10px 0 8px; font-size: 17px; }
+.err-card p { margin: 0 0 12px; font-size: 13.5px; color: #cfd6e6; line-height: 1.55; }
+.err-detail { font-size: 11px; color: #8a93a6; font-family: ui-monospace, monospace; word-break: break-word; }
+.err-actions { display: flex; gap: 10px; justify-content: center; margin: 6px 0 12px; }
+.err-actions .btn-primary { border-radius: 9px; }
+.err-foot { font-size: 11px; color: #6fd3a8; margin: 0; }
+
+.live-dot.idle { background: #8a93a6; animation: none; }
+.ctrl-note { font-size: 11px; color: var(--muted); margin: 6px 0 0; line-height: 1.5; }
 .chart-footer {
   display: flex;
   align-items: center;
@@ -338,12 +385,13 @@ body {
         <button class="chip" data-sym="BTC-USD">BTC</button>
       </div>
       <select id="rangeSelect" aria-label="Timeframe">
-        <option value="1d">1D · live</option>
-        <option value="5d">5D · intraday</option>
+        <option value="1d">1D · 2-min</option>
+        <option value="5d">5D · 15-min</option>
+        <option value="1mo">1M · 30-min</option>
         <option value="6mo">6M · daily</option>
         <option value="1y" selected>1Y · daily</option>
-        <option value="2y">2Y · daily</option>
         <option value="5y">5Y · weekly</option>
+        <option value="max">Max · monthly</option>
       </select>
     </div>
 
@@ -359,7 +407,26 @@ body {
 
   <main class="layout">
     <section class="chart-pane">
-      <div id="chart" class="chart-host"></div>
+      <div id="sampleBanner" class="sample-banner" style="display:none">
+        ⚠ Showing <b>SAMPLE data — NOT live or real</b>. Start the local server
+        (<code>node server.js</code>) and open <b>http://localhost:8123</b> for real prices.
+      </div>
+      <div class="chart-host">
+        <div id="chart"></div>
+        <div id="chartError" class="chart-error">
+          <div class="err-card">
+            <div class="err-icon">📡</div>
+            <h3 id="errTitle">Couldn’t load data</h3>
+            <p id="errMsg"></p>
+            <p id="errDetail" class="err-detail" style="display:none"></p>
+            <div class="err-actions">
+              <button id="errRetry" class="btn-primary">Retry</button>
+              <button id="errSample" class="btn-ghost">Use sample data (not live)</button>
+            </div>
+            <p class="err-foot">No fabricated data is ever shown as real.</p>
+          </div>
+        </div>
+      </div>
       <div class="chart-footer">
         <span id="dataStatus" class="data-status muted">Loading…</span>
         <span class="live-indicator"><span id="liveDot" class="live-dot" style="display:none"></span><span id="liveText" class="live-text"></span></span>
@@ -422,6 +489,12 @@ body {
           <label class="switch"><input type="checkbox" data-toggle="volume" checked /><span>Volume</span></label>
           <label class="switch"><input type="checkbox" data-toggle="rsi" /><span>RSI (14)</span></label>
           <label class="switch"><input type="checkbox" data-toggle="sr" /><span>Auto support/resistance zones</span></label>
+        </div>
+
+        <div class="control-group">
+          <h3>Data accuracy</h3>
+          <label class="switch"><input type="checkbox" id="adjustedToggle" /><span>Adjusted for splits &amp; dividends</span></label>
+          <p class="ctrl-note">Off = raw prices (matches Yahoo's candles). On = back-adjusted, ideal for long-term comparisons.</p>
         </div>
 
         <button id="resetViewBtn" class="btn-ghost wide">Reset zoom / pan</button>
@@ -713,29 +786,50 @@ body {
     return Math.round(n * 100) / 100;
   }
 
+  /**
+   * Load REAL market data. Throws a structured error on failure — it never
+   * silently substitutes synthetic data. The caller decides what to do
+   * (retry, or explicitly fall back to clearly-labelled sample data).
+   */
   async function load(symbol, range = '1y', interval = '1d', opts = {}) {
-    const url = `/api/chart?symbol=${encodeURIComponent(symbol)}&range=${encodeURIComponent(
-      range
-    )}&interval=${encodeURIComponent(interval)}`;
+    const params = new URLSearchParams({ symbol, range, interval });
+    if (opts.adjusted) params.set('adjusted', '1');
+    let res, json;
     try {
-      const res = await fetch(url, { headers: { Accept: 'application/json' } });
-      const json = await res.json();
-      if (!res.ok || json.error || !Array.isArray(json.candles) || json.candles.length < 2) {
-        throw new Error(json.message || 'No live data');
-      }
-      return json;
-    } catch (err) {
-      // For live polling we'd rather keep the last good frame than swap to demo.
-      if (opts.noFallback) throw err;
-      // Otherwise: network blocked or provider down → deterministic offline demo data.
-      const demo = synth(symbol, range === '5d' || interval !== '1d' ? 120 : 260);
-      demo.note =
-        'Showing offline demo data — run the local server (node server.js) for live prices.';
-      return demo;
+      res = await fetch('/api/chart?' + params.toString(), { headers: { Accept: 'application/json' } });
+    } catch (netErr) {
+      const e = new Error('no_server');
+      e.kind = 'no_server';
+      e.message =
+        'Can’t reach the local data server. Make sure you started it with ' +
+        '“node server.js” and opened the app at http://localhost:8123 (not by ' +
+        'double-clicking the HTML file).';
+      throw e;
     }
+    try {
+      json = await res.json();
+    } catch (_) {
+      json = {};
+    }
+    if (!res.ok || json.error || !Array.isArray(json.candles) || json.candles.length < 2) {
+      const e = new Error(json.message || 'Could not fetch real market data.');
+      e.kind = json.error || 'upstream';
+      e.detail = json.detail || [];
+      throw e;
+    }
+    return json;
   }
 
-  window.MarketData = { load, synth };
+  /** Explicit, clearly-labelled sample data (offline only — never live). */
+  function loadDemo(symbol, range = '1y', interval = '1d') {
+    const demo = synth(symbol, range === '5d' || range === '1d' || interval !== '1d' ? 130 : 260);
+    demo.source = 'Sample data (NOT live)';
+    demo.synthetic = true;
+    demo.fetchedAt = Date.now();
+    return demo;
+  }
+
+  window.MarketData = { load, loadDemo, synth };
 })();
 
 </script>
@@ -2304,6 +2398,7 @@ body {
     symbol: 'AAPL',
     range: '1y',
     interval: '1d',
+    adjusted: false,
     lessonIdx: 0,
     stepIdx: 0,
     view: 'lessons',
@@ -2333,18 +2428,65 @@ body {
   }
 
   // ---- data ----------------------------------------------------------------
+  function renderCurrentView() {
+    if (state.view === 'lessons') renderStep();
+    else applyExplore();
+  }
+
   async function loadSymbol(sym) {
     state.symbol = (sym || state.symbol).toUpperCase().trim();
     $('#symbolInput').value = state.symbol;
+    // Opened as a standalone file (no server) → honest sample data + banner.
+    if (location.protocol === 'file:') {
+      useSampleData();
+      save();
+      return;
+    }
+    hideError();
     setStatus('Loading ' + state.symbol + '…', 'muted');
-    const data = await window.MarketData.load(state.symbol, state.range, state.interval);
+    try {
+      const data = await window.MarketData.load(state.symbol, state.range, state.interval, {
+        adjusted: state.adjusted
+      });
+      state.data = data;
+      chart.setData(data);
+      renderHeader();
+      markUpdated(data);
+      renderCurrentView();
+    } catch (err) {
+      showError(err);
+    }
+    save();
+  }
+
+  // Explicit, clearly-labelled sample data — only when the user opts in.
+  function useSampleData() {
+    hideError();
+    const data = window.MarketData.loadDemo(state.symbol, state.range, state.interval);
     state.data = data;
     chart.setData(data);
     renderHeader();
     markUpdated(data);
-    if (state.view === 'lessons') renderStep();
-    else applyExplore();
-    save();
+    renderCurrentView();
+  }
+
+  function showError(err) {
+    const ov = $('#chartError');
+    const isNoServer = err && err.kind === 'no_server';
+    $('#errTitle').textContent = isNoServer ? 'Local data server not reachable' : 'Couldn’t load real data for ' + state.symbol;
+    $('#errMsg').textContent = err && err.message ? err.message : 'Unknown error.';
+    const det = $('#errDetail');
+    if (err && err.detail && err.detail.length) {
+      det.textContent = err.detail.join('  •  ');
+      det.style.display = 'block';
+    } else det.style.display = 'none';
+    ov.classList.add('show');
+    setStatus('No data — real feed unavailable', 'warn');
+    $('#liveDot').style.display = 'none';
+    $('#liveText').textContent = '';
+  }
+  function hideError() {
+    $('#chartError').classList.remove('show');
   }
 
   function renderHeader() {
@@ -2376,10 +2518,23 @@ body {
 
   // ---- live polling --------------------------------------------------------
   let refreshing = false;
+  const STATE_LABEL = { REGULAR: 'open', PRE: 'pre-market', PREPRE: 'pre-market', POST: 'after-hours', POSTPOST: 'after-hours', CLOSED: 'closed' };
   function markUpdated(data) {
     const live = !data.synthetic;
-    $('#liveDot').style.display = live ? 'inline-block' : 'none';
-    $('#liveText').textContent = live ? 'LIVE · updated ' + new Date().toLocaleTimeString() : '';
+    const banner = $('#sampleBanner');
+    if (banner) banner.style.display = data.synthetic ? 'flex' : 'none';
+    const dot = $('#liveDot');
+    const txt = $('#liveText');
+    if (!live) {
+      dot.style.display = 'none';
+      txt.textContent = '';
+      return;
+    }
+    const ms = data.marketState && STATE_LABEL[data.marketState];
+    const now = new Date().toLocaleTimeString();
+    dot.style.display = 'inline-block';
+    dot.classList.toggle('idle', data.marketState && data.marketState !== 'REGULAR');
+    txt.textContent = ms ? `Market ${ms} · updated ${now}` : `LIVE · updated ${now}`;
   }
   function flashPrice(prev, next) {
     if (next === prev) return;
@@ -2389,12 +2544,13 @@ body {
     e.classList.add(next > prev ? 'flash-up' : 'flash-down');
   }
   async function refreshLive() {
-    if (refreshing || document.hidden || !state.data) return;
+    // never poll over sample data or while an error is shown
+    if (refreshing || document.hidden || !state.data || state.data.synthetic) return;
     refreshing = true;
     const sym = state.symbol;
     try {
-      // noFallback: on a transient error keep the last good frame instead of demo data
-      const data = await window.MarketData.load(state.symbol, state.range, state.interval, { noFallback: true });
+      // load() throws on any failure, so a transient hiccup keeps the last good frame
+      const data = await window.MarketData.load(state.symbol, state.range, state.interval, { adjusted: state.adjusted });
       if (sym !== state.symbol) return; // user switched symbols mid-fetch
       const prevClose = state.data.candles[state.data.candles.length - 1].close;
       state.data = data;
@@ -2600,8 +2756,8 @@ body {
     $('#rangeSelect').addEventListener('change', (e) => {
       const v = e.target.value;
       const map = {
-        '1d': ['1d', '2m'], '5d': ['5d', '15m'], '6mo': ['6mo', '1d'],
-        '1y': ['1y', '1d'], '2y': ['2y', '1d'], '5y': ['5y', '1wk']
+        '1d': ['1d', '2m'], '5d': ['5d', '15m'], '1mo': ['1mo', '30m'],
+        '6mo': ['6mo', '1d'], '1y': ['1y', '1d'], '5y': ['5y', '1wk'], 'max': ['max', '1mo']
       };
       [state.range, state.interval] = map[v] || ['1y', '1d'];
       loadSymbol(state.symbol);
@@ -2641,6 +2797,18 @@ body {
     });
 
     $('#resetViewBtn').addEventListener('click', () => chart.resetView());
+
+    // adjusted-prices toggle (requires a reload)
+    const adj = $('#adjustedToggle');
+    if (adj)
+      adj.addEventListener('change', () => {
+        state.adjusted = adj.checked;
+        loadSymbol(state.symbol);
+      });
+
+    // error overlay actions
+    $('#errRetry').addEventListener('click', () => loadSymbol(state.symbol));
+    $('#errSample').addEventListener('click', useSampleData);
   }
 
   // ---- boot ----------------------------------------------------------------
