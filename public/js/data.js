@@ -98,7 +98,7 @@
     return Math.round(n * 100) / 100;
   }
 
-  async function load(symbol, range = '1y', interval = '1d') {
+  async function load(symbol, range = '1y', interval = '1d', opts = {}) {
     const url = `/api/chart?symbol=${encodeURIComponent(symbol)}&range=${encodeURIComponent(
       range
     )}&interval=${encodeURIComponent(interval)}`;
@@ -110,7 +110,9 @@
       }
       return json;
     } catch (err) {
-      // Network blocked or provider down → deterministic offline demo data.
+      // For live polling we'd rather keep the last good frame than swap to demo.
+      if (opts.noFallback) throw err;
+      // Otherwise: network blocked or provider down → deterministic offline demo data.
       const demo = synth(symbol, range === '5d' || interval !== '1d' ? 120 : 260);
       demo.note =
         'Showing offline demo data — run the local server (node server.js) for live prices.';

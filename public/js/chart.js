@@ -94,6 +94,24 @@
       this.requestRender();
       return this;
     }
+    /** Refresh candles in place for live polling, preserving the user's zoom/pan
+     *  (and following the latest bar only if they were already viewing it). */
+    updateData(data) {
+      const prevLen = this.candles.length;
+      const wasAtRight = this.visStart + this.visCount >= prevLen;
+      this.meta = data;
+      this.candles = data.candles || [];
+      if (wasAtRight) this.visStart = Math.max(0, this.candles.length - this.visCount);
+      this.clampView();
+      this._recalcRSI();
+      this.requestRender();
+      return this;
+    }
+    clampView() {
+      if (!this.candles.length) return;
+      this.visCount = Math.max(10, Math.min(this.visCount, this.candles.length));
+      this.visStart = Math.max(0, Math.min(this.visStart, this.candles.length - this.visCount));
+    }
     setMode(m) {
       this.mode = m;
       this.requestRender();

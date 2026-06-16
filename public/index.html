@@ -34,6 +34,7 @@
         <button class="chip" data-sym="BTC-USD">BTC</button>
       </div>
       <select id="rangeSelect" aria-label="Timeframe">
+        <option value="1d">1D · live</option>
         <option value="5d">5D · intraday</option>
         <option value="6mo">6M · daily</option>
         <option value="1y" selected>1Y · daily</option>
@@ -57,6 +58,7 @@
       <div id="chart" class="chart-host"></div>
       <div class="chart-footer">
         <span id="dataStatus" class="data-status muted">Loading…</span>
+        <span class="live-indicator"><span id="liveDot" class="live-dot" style="display:none"></span><span id="liveText" class="live-text"></span></span>
         <span class="chart-hint">drag to pan · scroll to zoom · hover for details</span>
       </div>
     </section>

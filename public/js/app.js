@@ -57,6 +57,7 @@
     state.data = data;
     chart.setData(data);
     renderHeader();
+    markUpdated(data);
     if (state.view === 'lessons') renderStep();
     else applyExplore();
     save();
@@ -87,6 +88,44 @@
     const s = $('#dataStatus');
     s.textContent = text;
     s.className = 'data-status ' + (tone || 'muted');
+  }
+
+  // ---- live polling --------------------------------------------------------
+  let refreshing = false;
+  function markUpdated(data) {
+    const live = !data.synthetic;
+    $('#liveDot').style.display = live ? 'inline-block' : 'none';
+    $('#liveText').textContent = live ? 'LIVE · updated ' + new Date().toLocaleTimeString() : '';
+  }
+  function flashPrice(prev, next) {
+    if (next === prev) return;
+    const e = $('#hdrPrice');
+    e.classList.remove('flash-up', 'flash-down');
+    void e.offsetWidth; // restart the CSS animation
+    e.classList.add(next > prev ? 'flash-up' : 'flash-down');
+  }
+  async function refreshLive() {
+    if (refreshing || document.hidden || !state.data) return;
+    refreshing = true;
+    const sym = state.symbol;
+    try {
+      // noFallback: on a transient error keep the last good frame instead of demo data
+      const data = await window.MarketData.load(state.symbol, state.range, state.interval, { noFallback: true });
+      if (sym !== state.symbol) return; // user switched symbols mid-fetch
+      const prevClose = state.data.candles[state.data.candles.length - 1].close;
+      state.data = data;
+      chart.updateData(data); // preserves zoom/pan, follows the latest bar if at the edge
+      // recompute Explore overlays against fresh data; lessons keep their
+      // (index-stable) annotations as-is to avoid flicker while reading
+      if (state.view === 'explore') applyExplore(true);
+      renderHeader();
+      markUpdated(data);
+      flashPrice(prevClose, data.candles[data.candles.length - 1].close);
+    } catch (_) {
+      // keep last good data; do nothing
+    } finally {
+      refreshing = false;
+    }
   }
 
   // ---- lesson navigation ---------------------------------------------------
@@ -232,13 +271,13 @@
   }
 
   // ---- explore sandbox -----------------------------------------------------
-  function applyExplore() {
+  function applyExplore(keepView) {
     if (!state.data) return;
     chart.clearTeaching();
     chart.setMode(state.explore.mode);
     chart.toggle('volume', state.explore.volume);
     chart.toggle('rsi', state.explore.rsi);
-    chart.resetView();
+    if (!keepView) chart.resetView();
     const closes = state.data.candles.map((c) => c.close);
     if (state.explore.ma20) chart.setOverlay('ma20', { data: window.TA.sma(closes, 20), color: C.ma20, label: 'SMA 20' });
     if (state.explore.ma50) chart.setOverlay('ma50', { data: window.TA.sma(closes, 50), color: C.ma50, label: 'SMA 50' });
@@ -277,8 +316,8 @@
     $('#rangeSelect').addEventListener('change', (e) => {
       const v = e.target.value;
       const map = {
-        '6mo': ['6mo', '1d'], '1y': ['1y', '1d'], '2y': ['2y', '1d'],
-        '5y': ['5y', '1wk'], '5d': ['5d', '15m']
+        '1d': ['1d', '2m'], '5d': ['5d', '15m'], '6mo': ['6mo', '1d'],
+        '1y': ['1y', '1d'], '2y': ['2y', '1d'], '5y': ['5y', '1wk']
       };
       [state.range, state.interval] = map[v] || ['1y', '1d'];
       loadSymbol(state.symbol);
@@ -330,6 +369,12 @@
     await loadSymbol(state.symbol);
     if (state.view === 'lessons') renderStep();
     else applyExplore();
+
+    // live auto-refresh: poll every ~12s, and immediately when the tab regains focus
+    setInterval(refreshLive, 12000);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) refreshLive();
+    });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
