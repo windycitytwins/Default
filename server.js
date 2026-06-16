@@ -312,6 +312,60 @@ async function getQuote(symbol) {
   }
 }
 
+// --- Nasdaq intraday (keyless live-ticking for the 1D view) ------------------
+const INTRADAY_MS = { '1m': 60000, '2m': 120000, '5m': 300000, '15m': 900000, '30m': 1800000, '60m': 3600000, '90m': 5400000, '1h': 3600000 };
+// Aggregate fine-grained price points into proper OHLC candles.
+function bucketize(points, intervalMs) {
+  const map = new Map();
+  for (const p of points) {
+    const k = Math.floor(p.time / intervalMs) * intervalMs;
+    let b = map.get(k);
+    if (!b) {
+      b = { time: k, open: p.price, high: p.price, low: p.price, close: p.price, volume: 0 };
+      map.set(k, b);
+    }
+    if (p.price > b.high) b.high = p.price;
+    if (p.price < b.low) b.low = p.price;
+    b.close = p.price;
+    b.volume += p.volume || 0;
+  }
+  const out = [...map.values()].sort((a, b) => a.time - b.time);
+  out.forEach((c) => (c.adjclose = c.close));
+  return out;
+}
+async function fromNasdaqIntraday(symbol, interval) {
+  const url = `https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/chart?assetclass=stocks`;
+  const headers = {
+    Accept: 'application/json, text/plain, */*',
+    Origin: 'https://www.nasdaq.com',
+    Referer: 'https://www.nasdaq.com/',
+    'Accept-Language': 'en-US,en;q=0.9'
+  };
+  const res = await withRetry(() => httpGet(url, { headers, timeoutMs: 10000 }), { attempts: 2 });
+  if (res.status !== 200) throw tagErr(`Nasdaq intraday HTTP ${res.status}`, res.status, res.body);
+  const json = JSON.parse(res.body);
+  const arr = json && json.data && (json.data.chart || json.data.charts);
+  if (!Array.isArray(arr) || arr.length < 2) throw tagErr('Nasdaq intraday: no points', 200, res.body);
+  const points = arr
+    .map((p) => {
+      let time = NaN;
+      if (p.x != null && Number(p.x) > 1e11) time = Number(p.x);
+      else if (p.z && p.z.dateTime) time = new Date(String(p.z.dateTime).replace(/\bET\b/i, '').trim()).getTime();
+      const price = p.y != null ? Number(p.y) : p.z ? numLike(p.z.value) : null;
+      const volume = p.z && p.z.volume != null ? numLike(p.z.volume) : 0;
+      return { time, price, volume: volume || 0 };
+    })
+    .filter((p) => Number.isFinite(p.time) && Number.isFinite(p.price));
+  if (points.length < 2) throw tagErr('Nasdaq intraday: unparseable points', 200, res.body);
+  const candles = bucketize(points, INTRADAY_MS[interval] || 120000);
+  if (candles.length < 2) throw tagErr('Nasdaq intraday: too few candles', 200, res.body);
+  return {
+    symbol: symbol.toUpperCase(), currency: 'USD', exchange: 'NASDAQ', instrumentType: 'EQUITY',
+    interval, range: '1d', source: 'Nasdaq (intraday)', name: '', fetchedAt: Date.now(),
+    marketState: usMarketState(), regularMarketPrice: points[points.length - 1].price, candles
+  };
+}
+
 // --- Twelve Data (optional, needs free TWELVEDATA_KEY) -----------------------
 const TD_INTERVAL = { '1m': '1min', '2m': '5min', '5m': '5min', '15m': '15min', '30m': '30min', '60m': '1h', '90m': '1h', '1h': '1h', '1d': '1day', '5d': '1day', '1wk': '1week', '1mo': '1month', '3mo': '1month' };
 async function fromTwelveData(symbol, interval) {
@@ -339,10 +393,12 @@ function providersFor(interval) {
   const list = [];
   if (TWELVEDATA_KEY) list.push(['Twelve Data', (s, r, i) => fromTwelveData(s, i)]);
   list.push(['Yahoo Finance', (s, r, i) => fromYahoo(s, r, i)]);
-  // Nasdaq & Stooq are daily-only, but they're great keyless backups when Yahoo throttles.
+  // keyless backups when Yahoo throttles: Nasdaq/Stooq daily, Nasdaq intraday.
   if (daily) {
     list.push(['Nasdaq', (s, r) => fromNasdaq(s, r)]);
     list.push(['Stooq', (s) => fromStooq(s)]);
+  } else {
+    list.push(['Nasdaq Intraday', (s, r, i) => fromNasdaqIntraday(s, i)]);
   }
   return list;
 }
@@ -357,13 +413,13 @@ async function loadChart(symbol, range, interval) {
       if (errors.length) data.note = 'Primary source busy; served by ' + data.source + '.';
       // Daily sources (Nasdaq/Stooq) only have completed bars — enrich with a
       // live quote so the header shows the CURRENT price, not yesterday's close.
-      if (data.regularMarketPrice == null) {
+      if (data.regularMarketPrice == null || data.previousClose == null) {
         const qd = await getQuote(symbol);
-        if (qd && isFinite(qd.price)) {
-          data.regularMarketPrice = qd.price;
-          if (data.previousClose == null) data.previousClose = qd.previousClose;
-          data.quoteAsOf = qd.asOf;
-          data.quoteSource = qd.source;
+        if (qd) {
+          if (data.regularMarketPrice == null && isFinite(qd.price)) data.regularMarketPrice = qd.price;
+          if (data.previousClose == null && qd.previousClose != null) data.previousClose = qd.previousClose;
+          data.quoteAsOf = data.quoteAsOf || qd.asOf;
+          data.quoteSource = data.quoteSource || qd.source;
         }
       }
       if (!data.marketState) data.marketState = usMarketState();
@@ -383,6 +439,7 @@ async function diagnose(symbol) {
   const all = [
     ['Yahoo Finance', () => fromYahoo(symbol, '1mo', '1d')],
     ['Nasdaq', () => fromNasdaq(symbol, '1y')],
+    ['Nasdaq Intraday', () => fromNasdaqIntraday(symbol, '2m')],
     ['Stooq', () => fromStooq(symbol)]
   ];
   if (TWELVEDATA_KEY) all.unshift(['Twelve Data', () => fromTwelveData(symbol, '1d')]);
@@ -492,4 +549,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { fromYahoo, fromStooq, fromNasdaq, fromNasdaqQuote, getQuote, fromTwelveData, searchSymbols, loadChart, diagnose, applyAdjustment, getYahooAuth };
+module.exports = { fromYahoo, fromStooq, fromNasdaq, fromNasdaqIntraday, fromNasdaqQuote, getQuote, fromTwelveData, searchSymbols, loadChart, diagnose, applyAdjustment, getYahooAuth };
