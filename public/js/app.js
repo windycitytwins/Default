@@ -116,15 +116,25 @@
     if (!d) return;
     const last = d.candles[d.candles.length - 1];
     const prev = d.candles[d.candles.length - 2] || last;
-    const chg = last.close - prev.close;
-    const pct = (chg / prev.close) * 100;
+    // For intraday data the last bar IS the live price. For daily data the last
+    // bar is a completed (often prior-day) close, so prefer the live quote.
+    const intraday = /(m|h)$/.test(d.interval || state.interval || '');
+    const haveLive = typeof d.regularMarketPrice === 'number' && isFinite(d.regularMarketPrice);
+    const price = !intraday && haveLive ? d.regularMarketPrice : last.close;
+    const prevRef =
+      typeof d.previousClose === 'number' && isFinite(d.previousClose) ? d.previousClose : prev.close;
+    const chg = price - prevRef;
+    const pct = prevRef ? (chg / prevRef) * 100 : 0;
     const up = chg >= 0;
     $('#hdrSymbol').textContent = d.symbol;
     $('#hdrName').textContent = d.name || d.exchange || '';
-    $('#hdrPrice').textContent = last.close.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    $('#hdrPrice').textContent = price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const chgEl = $('#hdrChange');
     chgEl.textContent = `${up ? '▲' : '▼'} ${Math.abs(chg).toFixed(2)} (${up ? '+' : ''}${pct.toFixed(2)}%)`;
     chgEl.className = 'hdr-change ' + (up ? 'pos' : 'neg');
+
+    // mark the live price on the chart (daily views only; intraday ends live)
+    chart.setLivePrice(!intraday && haveLive ? d.regularMarketPrice : null);
 
     let label = `Source: ${d.source}`;
     let tone = d.synthetic ? 'warn' : 'good';
@@ -140,23 +150,38 @@
 
   // ---- live polling --------------------------------------------------------
   let refreshing = false;
-  const STATE_LABEL = { REGULAR: 'open', PRE: 'pre-market', PREPRE: 'pre-market', POST: 'after-hours', POSTPOST: 'after-hours', CLOSED: 'closed' };
   function markUpdated(data) {
-    const live = !data.synthetic;
     const banner = $('#sampleBanner');
     if (banner) banner.style.display = data.synthetic ? 'flex' : 'none';
     const dot = $('#liveDot');
     const txt = $('#liveText');
-    if (!live) {
+    if (data.synthetic) {
       dot.style.display = 'none';
       txt.textContent = '';
       return;
     }
-    const ms = data.marketState && STATE_LABEL[data.marketState];
     const now = new Date().toLocaleTimeString();
+    const lastBar = data.candles[data.candles.length - 1];
+    const asOf = lastBar ? new Date(lastBar.time).toLocaleDateString() : '';
     dot.style.display = 'inline-block';
-    dot.classList.toggle('idle', data.marketState && data.marketState !== 'REGULAR');
-    txt.textContent = ms ? `Market ${ms} · updated ${now}` : `LIVE · updated ${now}`;
+    const st = data.marketState;
+    // honest labelling — only call it LIVE when the market is actually open
+    if (st === 'REGULAR') {
+      dot.classList.remove('idle');
+      txt.textContent = `LIVE · updated ${now}`;
+    } else if (st === 'PRE') {
+      dot.classList.add('idle');
+      txt.textContent = `Pre-market · ${now}`;
+    } else if (st === 'POST') {
+      dot.classList.add('idle');
+      txt.textContent = `After-hours · ${now}`;
+    } else if (st === 'CLOSED') {
+      dot.classList.add('idle');
+      txt.textContent = `Market closed · last close ${asOf}`;
+    } else {
+      dot.classList.remove('idle');
+      txt.textContent = `Updated ${now}`;
+    }
   }
   function flashPrice(prev, next) {
     if (next === prev) return;
@@ -189,6 +214,29 @@
       // keep last good data; do nothing
     } finally {
       refreshing = false;
+    }
+  }
+
+  // Lightweight live-price refresh for daily/weekly views (no full re-fetch).
+  async function refreshQuote() {
+    if (document.hidden || !state.data || state.data.synthetic) return;
+    const sym = state.symbol;
+    try {
+      const q = await window.MarketData.quote(sym);
+      if (sym !== state.symbol) return;
+      if (q.symbol && q.symbol.toUpperCase() !== sym) return;
+      const prevShown =
+        typeof state.data.regularMarketPrice === 'number'
+          ? state.data.regularMarketPrice
+          : state.data.candles[state.data.candles.length - 1].close;
+      state.data.regularMarketPrice = q.price;
+      if (q.previousClose != null) state.data.previousClose = q.previousClose;
+      if (q.marketState) state.data.marketState = q.marketState;
+      renderHeader();
+      markUpdated(state.data);
+      flashPrice(prevShown, q.price);
+    } catch (_) {
+      /* keep last good price */
     }
   }
 
@@ -446,11 +494,12 @@
     if (state.view === 'lessons') renderStep();
     else applyExplore();
 
-    // live auto-refresh: poll every ~20s (gentle on free sources; server also
-    // caches), and immediately when the tab regains focus
-    setInterval(refreshLive, 20000);
+    // live auto-refresh every ~18s (gentle; server also caches): intraday views
+    // re-fetch the full chart, daily views just refresh the live quote price.
+    const tick = () => (/(m|h)$/.test(state.interval) ? refreshLive() : refreshQuote());
+    setInterval(tick, 18000);
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) refreshLive();
+      if (!document.hidden) tick();
     });
   }
 

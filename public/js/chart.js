@@ -267,6 +267,11 @@
           if (v > max) max = v;
         }
       }
+      // keep the live-price line on-screen
+      if (this.livePrice != null) {
+        if (this.livePrice < min) min = this.livePrice;
+        if (this.livePrice > max) max = this.livePrice;
+      }
       if (!isFinite(min) || !isFinite(max)) {
         min = 0;
         max = 1;
@@ -705,18 +710,21 @@
       const ctx = this.ctx;
       const last = this.candles[this.candles.length - 1];
       if (!last) return;
-      const y = yOf(last.close);
+      // Prefer the live quote price (for daily data the last bar is yesterday).
+      const price = this.livePrice != null ? this.livePrice : last.close;
+      const ref = (this.candles[this.candles.length - 2] || last).close;
+      const y = yOf(price);
       if (y < L.price.y || y > L.price.y + L.price.h) return;
-      const up = last.close >= last.open;
+      const up = price >= ref;
       ctx.strokeStyle = up ? this.theme.up : this.theme.down;
       ctx.setLineDash([2, 3]);
-      ctx.lineWidth = 1;
+      ctx.lineWidth = this.livePrice != null ? 1.4 : 1;
       ctx.beginPath();
       ctx.moveTo(L.price.x, y);
       ctx.lineTo(L.price.x + L.price.w, y);
       ctx.stroke();
       ctx.setLineDash([]);
-      const tag = fmtPrice(last.close);
+      const tag = (this.livePrice != null ? '● ' : '') + fmtPrice(price);
       ctx.font = 'bold 11px system-ui, sans-serif';
       const tw = ctx.measureText(tag).width + 10;
       ctx.fillStyle = up ? this.theme.up : this.theme.down;
@@ -724,6 +732,10 @@
       ctx.fillStyle = '#0e1320';
       ctx.textAlign = 'left';
       ctx.fillText(tag, L.price.x + L.price.w + 5, y + 4);
+    }
+    setLivePrice(p) {
+      this.livePrice = typeof p === 'number' && isFinite(p) ? p : null;
+      this.requestRender();
     }
 
     _drawCrosshair(L, yOf) {

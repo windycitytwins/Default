@@ -132,6 +132,16 @@
     return json;
   }
 
+  /** Lightweight live quote (current price) for the loaded symbol. */
+  async function quote(symbol) {
+    const res = await fetch('/api/quote?symbol=' + encodeURIComponent(symbol), {
+      headers: { Accept: 'application/json' }
+    });
+    const j = await res.json();
+    if (!res.ok || j.error || !isFinite(j.price)) throw new Error(j.error || 'no quote');
+    return j;
+  }
+
   /** Explicit, clearly-labelled sample data (offline only — never live). */
   function loadDemo(symbol, range = '1y', interval = '1d') {
     const demo = synth(symbol, range === '5d' || range === '1d' || interval !== '1d' ? 130 : 260);
@@ -141,5 +151,5 @@
     return demo;
   }
 
-  window.MarketData = { load, loadDemo, synth };
+  window.MarketData = { load, loadDemo, quote, synth };
 })();

@@ -257,6 +257,61 @@ async function fromNasdaq(symbol, range) {
   };
 }
 
+// --- live quote (Nasdaq /info) + US market state ----------------------------
+function numLike(s) {
+  if (s == null) return null;
+  const n = Number(String(s).replace(/[$,%\s]/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+function usMarketState() {
+  const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const day = et.getDay();
+  if (day === 0 || day === 6) return 'CLOSED';
+  const mins = et.getHours() * 60 + et.getMinutes();
+  if (mins >= 570 && mins < 960) return 'REGULAR'; // 9:30–16:00 ET
+  if (mins >= 240 && mins < 570) return 'PRE'; // 4:00–9:30
+  if (mins >= 960 && mins < 1200) return 'POST'; // 16:00–20:00
+  return 'CLOSED';
+}
+async function fromNasdaqQuote(symbol) {
+  const url = `https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/info?assetclass=stocks`;
+  const headers = {
+    Accept: 'application/json, text/plain, */*',
+    Origin: 'https://www.nasdaq.com',
+    Referer: 'https://www.nasdaq.com/',
+    'Accept-Language': 'en-US,en;q=0.9'
+  };
+  const res = await withRetry(() => httpGet(url, { headers, timeoutMs: 9000 }), { attempts: 2 });
+  if (res.status !== 200) throw tagErr(`Nasdaq quote HTTP ${res.status}`, res.status, res.body);
+  const json = JSON.parse(res.body);
+  const d = json && json.data;
+  const pd = d && d.primaryData;
+  const price = pd && numLike(pd.lastSalePrice);
+  if (price == null) throw tagErr('Nasdaq quote: no price', 200, res.body);
+  const change = pd ? numLike(pd.netChange) : null;
+  return {
+    symbol: ((d && d.symbol) || symbol).toUpperCase(),
+    price,
+    change,
+    changePct: pd ? numLike(pd.percentageChange) : null,
+    previousClose: change != null ? +(price - change).toFixed(4) : null,
+    volume: pd ? numLike(pd.volume) : null,
+    name: (d && d.companyName) || '',
+    exchange: (d && d.exchange) || '',
+    asOf: (pd && pd.lastTradeTimestamp) || '',
+    marketState: usMarketState(),
+    source: 'Nasdaq'
+  };
+}
+// Best-effort live price (keyless). Returns null on failure.
+async function getQuote(symbol) {
+  try {
+    return await fromNasdaqQuote(symbol);
+  } catch (_) {
+    return null;
+  }
+}
+
 // --- Twelve Data (optional, needs free TWELVEDATA_KEY) -----------------------
 const TD_INTERVAL = { '1m': '1min', '2m': '5min', '5m': '5min', '15m': '15min', '30m': '30min', '60m': '1h', '90m': '1h', '1h': '1h', '1d': '1day', '5d': '1day', '1wk': '1week', '1mo': '1month', '3mo': '1month' };
 async function fromTwelveData(symbol, interval) {
@@ -300,8 +355,20 @@ async function loadChart(symbol, range, interval) {
     try {
       const data = await fn(symbol, range, interval);
       if (errors.length) data.note = 'Primary source busy; served by ' + data.source + '.';
+      // Daily sources (Nasdaq/Stooq) only have completed bars — enrich with a
+      // live quote so the header shows the CURRENT price, not yesterday's close.
+      if (data.regularMarketPrice == null) {
+        const qd = await getQuote(symbol);
+        if (qd && isFinite(qd.price)) {
+          data.regularMarketPrice = qd.price;
+          if (data.previousClose == null) data.previousClose = qd.previousClose;
+          data.quoteAsOf = qd.asOf;
+          data.quoteSource = qd.source;
+        }
+      }
+      if (!data.marketState) data.marketState = usMarketState();
       // short TTL for intraday so it stays live; longer for daily to be gentle
-      cacheSet(key, data, /[mh]/.test(interval) ? 10000 : 120000);
+      cacheSet(key, data, /[mh]/.test(interval) ? 10000 : 90000);
       return { data, errors };
     } catch (e) {
       errors.push({ provider: name, status: e.status || 0, error: e.message, snippet: e.snippet || '' });
@@ -393,6 +460,7 @@ const server = http.createServer((req, res) => {
   const q = parsed.searchParams;
   if (p === '/api/chart') return void handleChart(res, q).catch((e) => sendJSON(res, { error: 'server_error', message: e.message }, 500));
   if (p === '/api/search') return void searchSymbols((q.get('q') || '').slice(0, 40)).then((quotes) => sendJSON(res, { quotes })).catch((e) => sendJSON(res, { quotes: [], error: e.message }));
+  if (p === '/api/quote') return void getQuote((q.get('symbol') || 'AAPL').toUpperCase().slice(0, 15)).then((r) => (r ? sendJSON(res, r) : sendJSON(res, { error: 'no_quote' }, 502))).catch((e) => sendJSON(res, { error: e.message }, 502));
   if (p === '/api/diagnose') return void diagnose((q.get('symbol') || 'AAPL').toUpperCase().slice(0, 15)).then((r) => sendJSON(res, r)).catch((e) => sendJSON(res, { error: e.message }, 500));
   if (p === '/api/health') return void sendJSON(res, { ok: true, twelveDataKey: !!TWELVEDATA_KEY, time: Date.now() });
   // static
@@ -424,4 +492,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { fromYahoo, fromStooq, fromNasdaq, fromTwelveData, searchSymbols, loadChart, diagnose, applyAdjustment, getYahooAuth };
+module.exports = { fromYahoo, fromStooq, fromNasdaq, fromNasdaqQuote, getQuote, fromTwelveData, searchSymbols, loadChart, diagnose, applyAdjustment, getYahooAuth };
