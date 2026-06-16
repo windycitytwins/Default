@@ -9,8 +9,9 @@ moving averages, volume, and RSI.
 
 - **A live, interactive candlestick chart** (custom-built on `<canvas>`, no
   charting libraries) with drag-to-pan, scroll-to-zoom, a crosshair + OHLC
-  tooltip, moving-average overlays, shaded support/resistance zones, crossover
-  markers and callout annotations.
+  tooltip, a **log-scale** option, multiple **moving averages** (SMA 20/50/100/200,
+  EMA 9/21), **Bollinger Bands**, **VWAP**, an **RSI** pane and a **MACD** pane,
+  shaded support/resistance zones, crossover markers and callout annotations.
 - **A 7-lesson curriculum**, each step illustrated on the *real* chart and
   punctuated with quick quizzes and a click-on-the-chart exercise:
   1. 🕯️ **Reading a Candlestick** — open/high/low/close, body & wicks, green vs red

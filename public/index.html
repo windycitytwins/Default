@@ -124,20 +124,30 @@
         <div class="control-group">
           <h3>Chart type</h3>
           <label class="switch"><input type="checkbox" data-toggle="mode" /><span>Line instead of candles</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="log" /><span>Logarithmic price scale</span></label>
         </div>
 
         <div class="control-group">
           <h3>Moving averages</h3>
+          <label class="switch"><input type="checkbox" data-toggle="ema9" /><span><i class="dot" style="background:#9be36b"></i>EMA 9</span></label>
           <label class="switch"><input type="checkbox" data-toggle="ma20" /><span><i class="dot" style="background:#46b3ff"></i>SMA 20</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="ema21" /><span><i class="dot" style="background:#5be0c0"></i>EMA 21</span></label>
           <label class="switch"><input type="checkbox" data-toggle="ma50" /><span><i class="dot" style="background:#ffb020"></i>SMA 50</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="ma100" /><span><i class="dot" style="background:#ff8f5e"></i>SMA 100</span></label>
           <label class="switch"><input type="checkbox" data-toggle="ma200" /><span><i class="dot" style="background:#e36bf0"></i>SMA 200</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ema20" /><span><i class="dot" style="background:#5be0c0"></i>EMA 20</span></label>
+        </div>
+
+        <div class="control-group">
+          <h3>Indicators</h3>
+          <label class="switch"><input type="checkbox" data-toggle="bb" /><span>Bollinger Bands (20, 2)</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="vwap" /><span><i class="dot" style="background:#ffd166"></i>VWAP (intraday)</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="rsi" /><span>RSI (14)</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="macd" /><span>MACD (12, 26, 9)</span></label>
         </div>
 
         <div class="control-group">
           <h3>Panels & levels</h3>
           <label class="switch"><input type="checkbox" data-toggle="volume" checked /><span>Volume</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="rsi" /><span>RSI (14)</span></label>
           <label class="switch"><input type="checkbox" data-toggle="sr" /><span>Auto support/resistance zones</span></label>
         </div>
 

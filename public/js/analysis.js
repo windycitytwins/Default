@@ -23,12 +23,14 @@
   }
 
   /** Analyse a single candle series → { score, rating, factors[] }. */
-  function analyze(candles, horizonLabel) {
+  function analyze(candles, horizonLabel, opts) {
+    opts = opts || {};
     const ta = window.TA;
     const n = candles ? candles.length : 0;
     if (!ta || n < 20) return null;
     const closes = candles.map((c) => c.close);
     const price = closes[n - 1];
+    const rsiArr = ta.rsi(closes, 14);
     const factors = [];
 
     // --- moving averages ---
@@ -82,7 +84,7 @@
     });
 
     // --- momentum (RSI) ---
-    const r = ta.rsi(closes, 14)[n - 1];
+    const r = rsiArr[n - 1];
     if (r != null) {
       let state = 'neutral';
       let detail = `RSI ${r.toFixed(0)} — neutral momentum.`;
@@ -161,6 +163,77 @@
       factors.push({ label: 'Volume', state, weight: 0.8, detail });
     }
 
+    // --- MACD ---
+    const macd = ta.macd(closes);
+    const ml = macd.macd[n - 1];
+    const sg = macd.signal[n - 1];
+    const hst = macd.hist[n - 1];
+    const hstPrev = macd.hist[n - 2];
+    if (ml != null && sg != null) {
+      const bull = ml > sg;
+      const aboveZero = ml > 0;
+      const rising = hst != null && hstPrev != null && hst > hstPrev;
+      factors.push({
+        label: 'MACD',
+        state: bull && aboveZero ? 'bull' : !bull && !aboveZero ? 'bear' : 'neutral',
+        weight: 1.2,
+        detail: `MACD ${bull ? 'above' : 'below'} its signal line${aboveZero ? ', above zero' : ', below zero'}; histogram ${rising ? 'rising' : 'falling'}.`
+      });
+    }
+
+    // --- Bollinger Bands (%B) ---
+    const bb = ta.bollinger(closes, 20, 2);
+    if (bb.upper[n - 1] != null) {
+      const width = bb.upper[n - 1] - bb.lower[n - 1] || 1;
+      const pb = (price - bb.lower[n - 1]) / width;
+      let state = 'neutral';
+      let detail = `Mid-band (%B ${Math.round(pb * 100)}%) — neutral volatility position.`;
+      if (pb > 1) {
+        state = 'bear';
+        detail = 'Price above the upper Bollinger band — stretched/overbought, mean-reversion risk.';
+      } else if (pb < 0) {
+        state = 'bull';
+        detail = 'Price below the lower band — stretched down, snap-back potential.';
+      }
+      factors.push({ label: 'Bollinger %B', state, weight: 0.7, detail });
+    }
+
+    // --- ADX (trend strength) ---
+    const adxObj = ta.adx(candles, 14);
+    const adxV = adxObj.adx[n - 1];
+    if (adxV != null) {
+      const dirUp = adxObj.plusDI[n - 1] >= adxObj.minusDI[n - 1];
+      const strong = adxV >= 25;
+      factors.push({
+        label: 'Trend strength (ADX)',
+        state: strong ? (dirUp ? 'bull' : 'bear') : 'neutral',
+        weight: strong ? 1.3 : 0.5,
+        detail: strong
+          ? `ADX ${adxV.toFixed(0)} — a strong ${dirUp ? 'up' : 'down'}trend (${dirUp ? '+DI > −DI' : '−DI > +DI'}).`
+          : `ADX ${adxV.toFixed(0)} — weak/choppy; trend signals are less reliable here.`
+      });
+    }
+
+    // --- VWAP (intraday only) ---
+    if (opts.intraday) {
+      const v = ta.vwap(candles)[n - 1];
+      if (v != null) {
+        const above = price > v;
+        factors.push({
+          label: 'VWAP',
+          state: above ? 'bull' : 'bear',
+          weight: 1.0,
+          detail: `Price ${above ? 'above' : 'below'} today's VWAP (${v.toFixed(2)}) — intraday ${above ? 'buyers' : 'sellers'} in control.`
+        });
+      }
+    }
+
+    // --- RSI divergence ---
+    const div = ta.divergence(candles, rsiArr);
+    if (div.bearish || div.bullish) {
+      factors.push({ label: 'RSI divergence', state: div.bearish ? 'bear' : 'bull', weight: 1.1, detail: div.detail });
+    }
+
     // --- position within range ---
     const hi = Math.max(...closes);
     const lo = Math.min(...closes);
@@ -201,7 +274,7 @@
     const out = {
       longTerm: analyze(sets.longTerm, 'long-term'),
       swing: analyze(sets.swing, 'multi-month'),
-      intraday: analyze(sets.intraday, 'intraday')
+      intraday: analyze(sets.intraday, 'intraday', { intraday: true })
     };
     const parts = [];
     if (out.longTerm) parts.push([out.longTerm.score, 1.2]);

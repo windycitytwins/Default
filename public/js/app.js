@@ -24,7 +24,7 @@
     lessonIdx: 0,
     stepIdx: 0,
     view: 'lessons',
-    explore: { mode: 'candles', ma20: false, ma50: false, ma200: false, ema20: false, volume: true, rsi: false, sr: false }
+    explore: { mode: 'candles', ema9: false, ma20: false, ema21: false, ma50: false, ma100: false, ma200: false, bb: false, vwap: false, volume: true, rsi: false, macd: false, sr: false, log: false }
   };
 
   let chart;
@@ -386,17 +386,29 @@
   // ---- explore sandbox -----------------------------------------------------
   function applyExplore(keepView) {
     if (!state.data) return;
+    const ex = state.explore;
+    const ta = window.TA;
     chart.clearTeaching();
-    chart.setMode(state.explore.mode);
-    chart.toggle('volume', state.explore.volume);
-    chart.toggle('rsi', state.explore.rsi);
+    chart.setMode(ex.mode);
+    chart.toggle('volume', ex.volume);
+    chart.toggle('rsi', ex.rsi);
+    chart.toggle('macd', ex.macd);
+    chart.setLogScale(ex.log);
     if (!keepView) chart.resetView();
-    const closes = state.data.candles.map((c) => c.close);
-    if (state.explore.ma20) chart.setOverlay('ma20', { data: window.TA.sma(closes, 20), color: C.ma20, label: 'SMA 20' });
-    if (state.explore.ma50) chart.setOverlay('ma50', { data: window.TA.sma(closes, 50), color: C.ma50, label: 'SMA 50' });
-    if (state.explore.ma200 && closes.length > 200) chart.setOverlay('ma200', { data: window.TA.sma(closes, 200), color: C.ma200, label: 'SMA 200' });
-    if (state.explore.ema20) chart.setOverlay('ema20', { data: window.TA.ema(closes, 20), color: C.ema, label: 'EMA 20', dash: [5, 4] });
-    if (state.explore.sr) {
+    const candles = state.data.candles;
+    const closes = candles.map((c) => c.close);
+    if (ex.ema9) chart.setOverlay('ema9', { data: ta.ema(closes, 9), color: '#9be36b', label: 'EMA 9', dash: [5, 4] });
+    if (ex.ma20) chart.setOverlay('ma20', { data: ta.sma(closes, 20), color: C.ma20, label: 'SMA 20' });
+    if (ex.ema21) chart.setOverlay('ema21', { data: ta.ema(closes, 21), color: C.ema, label: 'EMA 21', dash: [5, 4] });
+    if (ex.ma50) chart.setOverlay('ma50', { data: ta.sma(closes, 50), color: C.ma50, label: 'SMA 50' });
+    if (ex.ma100 && closes.length > 100) chart.setOverlay('ma100', { data: ta.sma(closes, 100), color: '#ff8f5e', label: 'SMA 100' });
+    if (ex.ma200 && closes.length > 200) chart.setOverlay('ma200', { data: ta.sma(closes, 200), color: C.ma200, label: 'SMA 200' });
+    if (ex.bb) {
+      const b = ta.bollinger(closes, 20, 2);
+      chart.setBand('bb', { upper: b.upper, lower: b.lower, mid: b.mid, color: 'rgba(120,160,255,0.07)', lineColor: 'rgba(150,180,255,0.6)' });
+    }
+    if (ex.vwap) chart.setOverlay('vwap', { data: ta.vwap(candles), color: '#ffd166', label: 'VWAP', width: 1.6 });
+    if (ex.sr) {
       const levels = window.TA.supportResistance(state.data.candles, { lookback: 5, maxLevels: 6, minTouches: 2 });
       levels.forEach((lvl, k) => {
         const isSup = lvl.role === 'support';
@@ -537,13 +549,13 @@
       if (e.key === 'ArrowLeft') go(-1);
     });
 
-    // explore toggles
+    // explore toggles (preserve zoom/pan when toggling)
     document.querySelectorAll('[data-toggle]').forEach((input) => {
       input.addEventListener('change', () => {
         const key = input.dataset.toggle;
         if (key === 'mode') state.explore.mode = input.checked ? 'line' : 'candles';
         else state.explore[key] = input.checked;
-        applyExplore();
+        applyExplore(true);
       });
     });
 

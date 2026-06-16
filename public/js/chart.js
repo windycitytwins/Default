@@ -62,9 +62,11 @@
 
       this.candles = [];
       this.mode = 'candles'; // 'candles' | 'line'
-      this.flags = { volume: true, rsi: false };
+      this.flags = { volume: true, rsi: false, macd: false };
+      this.logScale = false;
 
       this.overlays = new Map(); // id -> {data:[null|num], color, width, label, dash}
+      this.bands = new Map(); // id -> {upper:[], lower:[], color, lineColor, label}
       this.hlines = new Map(); // id -> {price, color, label, dash}
       this.zones = new Map(); // id -> {lo, hi, color, label}
       this.markers = []; // {index, side, color, text, shape}
@@ -119,6 +121,11 @@
     toggle(flag, on) {
       this.flags[flag] = on;
       if (flag === 'rsi' && on) this._recalcRSI();
+      if (flag === 'macd' && on) this._recalcMACD();
+      this.requestRender();
+    }
+    setLogScale(on) {
+      this.logScale = !!on;
       this.requestRender();
     }
     setOverlay(id, cfg) {
@@ -131,6 +138,14 @@
     }
     clearOverlays() {
       this.overlays.clear();
+      this.requestRender();
+    }
+    setBand(id, cfg) {
+      this.bands.set(id, cfg);
+      this.requestRender();
+    }
+    clearBands() {
+      this.bands.clear();
       this.requestRender();
     }
     setHLine(id, cfg) {
@@ -176,6 +191,7 @@
     /** Clear everything a lesson might have drawn. */
     clearTeaching() {
       this.overlays.clear();
+      this.bands.clear();
       this.hlines.clear();
       this.zones.clear();
       this.markers = [];
@@ -219,20 +235,39 @@
       const H = this.cssH;
       const p = this._pad;
       const innerH = H - p.top - p.bottom;
-      let volH = this.flags.volume ? Math.max(46, innerH * 0.16) : 0;
-      let rsiH = this.flags.rsi ? Math.max(54, innerH * 0.2) : 0;
-      const gap = (this.flags.volume || this.flags.rsi) ? 8 : 0;
-      const priceH = innerH - volH - rsiH - (this.flags.volume ? gap : 0) - (this.flags.rsi ? gap : 0);
+      const gap = 8;
+      const volH = this.flags.volume ? Math.max(42, innerH * 0.14) : 0;
+      const rsiH = this.flags.rsi ? Math.max(50, innerH * 0.18) : 0;
+      const macdH = this.flags.macd ? Math.max(50, innerH * 0.18) : 0;
+      let sub = 0;
+      if (this.flags.volume) sub += volH + gap;
+      if (this.flags.rsi) sub += rsiH + gap;
+      if (this.flags.macd) sub += macdH + gap;
+      const priceH = innerH - sub;
       const x = p.left;
       const w = W - p.left - p.right;
       let y = p.top;
       const price = { x, y, w, h: priceH };
-      y += priceH + (this.flags.volume ? gap : 0);
-      const vol = this.flags.volume ? { x, y, w, h: volH } : null;
-      if (this.flags.volume) y += volH;
-      y += this.flags.rsi ? gap : 0;
-      const rsi = this.flags.rsi ? { x, y, w, h: rsiH } : null;
-      return { price, vol, rsi, W, H };
+      y += priceH;
+      let vol = null;
+      let rsi = null;
+      let macd = null;
+      if (this.flags.volume) {
+        y += gap;
+        vol = { x, y, w, h: volH };
+        y += volH;
+      }
+      if (this.flags.rsi) {
+        y += gap;
+        rsi = { x, y, w, h: rsiH };
+        y += rsiH;
+      }
+      if (this.flags.macd) {
+        y += gap;
+        macd = { x, y, w, h: macdH };
+        y += macdH;
+      }
+      return { price, vol, rsi, macd, W, H };
     }
     _visible() {
       const s = this.visStart;
@@ -267,6 +302,13 @@
           if (v > max) max = v;
         }
       }
+      // include band (Bollinger) extents
+      for (const b of this.bands.values()) {
+        for (let i = s; i < e; i++) {
+          if (b.upper[i] != null && b.upper[i] > max) max = b.upper[i];
+          if (b.lower[i] != null && b.lower[i] < min) min = b.lower[i];
+        }
+      }
       // keep the live-price line on-screen
       if (this.livePrice != null) {
         if (this.livePrice < min) min = this.livePrice;
@@ -279,6 +321,7 @@
       const span = max - min || max || 1;
       min -= span * 0.08;
       max += span * 0.08;
+      if (this.logScale && min <= 0) min = Math.max(1e-6, max * 0.02);
       return { min, max };
     }
 
@@ -307,27 +350,96 @@
       const scale = this._priceScale();
       this._scale = scale;
       this._L = L;
-      const yOf = (price) =>
-        L.price.y + L.price.h - ((price - scale.min) / (scale.max - scale.min)) * L.price.h;
+      let yOf;
+      if (this.logScale) {
+        const lmin = Math.log(scale.min);
+        const lmax = Math.log(scale.max);
+        const sp = lmax - lmin || 1;
+        yOf = (price) => {
+          const p = price > 0 ? price : scale.min;
+          return L.price.y + L.price.h - ((Math.log(p) - lmin) / sp) * L.price.h;
+        };
+        this._priceOf = (py) => Math.exp(lmin + ((L.price.y + L.price.h - py) / L.price.h) * sp);
+      } else {
+        const sp = scale.max - scale.min || 1;
+        yOf = (price) => L.price.y + L.price.h - ((price - scale.min) / sp) * L.price.h;
+        this._priceOf = (py) => scale.min + ((L.price.y + L.price.h - py) / L.price.h) * sp;
+      }
       this._yOf = yOf;
-      this._priceOf = (py) =>
-        scale.min + ((L.price.y + L.price.h - py) / L.price.h) * (scale.max - scale.min);
 
       this._drawGrid(L, scale, yOf);
       this._drawZones(L, yOf);
       this._drawHighlights(L);
+      this._drawBands(L, yOf);
       if (this.mode === 'candles') this._drawCandles(L, yOf);
       else this._drawLine(L, yOf);
       this._drawOverlays(L, yOf);
       this._drawHLines(L, yOf);
       if (this.flags.volume && L.vol) this._drawVolume(L.vol);
       if (this.flags.rsi && L.rsi) this._drawRSI(L.rsi);
+      if (this.flags.macd && L.macd) this._drawMACD(L.macd);
       this._drawMarkers(L, yOf);
       this._drawAnnotations(L, yOf);
       this._drawPriceAxis(L, scale, yOf);
       this._drawTimeAxis(L);
       this._drawCrosshair(L, yOf);
       this._drawLastPrice(L, yOf);
+    }
+
+    _drawBands(L, yOf) {
+      const ctx = this.ctx;
+      const { s, e } = this._visible();
+      for (const [, b] of this.bands) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(L.price.x, L.price.y, L.price.w, L.price.h);
+        ctx.clip();
+        // fill between upper and lower
+        ctx.beginPath();
+        let started = false;
+        for (let i = s; i < e; i++) {
+          if (b.upper[i] == null) continue;
+          const x = this._xOf(i, L.price);
+          const y = yOf(b.upper[i]);
+          if (!started) {
+            ctx.moveTo(x, y);
+            started = true;
+          } else ctx.lineTo(x, y);
+        }
+        for (let i = e - 1; i >= s; i--) {
+          if (b.lower[i] == null) continue;
+          ctx.lineTo(this._xOf(i, L.price), yOf(b.lower[i]));
+        }
+        ctx.closePath();
+        ctx.fillStyle = b.color || 'rgba(120,160,255,0.08)';
+        ctx.fill();
+        // the three lines
+        const line = (arr, dash) => {
+          ctx.strokeStyle = b.lineColor || 'rgba(150,180,255,0.7)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash(dash || []);
+          ctx.beginPath();
+          let st = false;
+          for (let i = s; i < e; i++) {
+            if (arr[i] == null) {
+              st = false;
+              continue;
+            }
+            const x = this._xOf(i, L.price);
+            const y = yOf(arr[i]);
+            if (!st) {
+              ctx.moveTo(x, y);
+              st = true;
+            } else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+          ctx.setLineDash([]);
+        };
+        line(b.upper);
+        line(b.lower);
+        if (b.mid) line(b.mid, [4, 4]);
+        ctx.restore();
+      }
     }
 
     _drawGrid(L, scale, yOf) {
@@ -345,6 +457,18 @@
     }
 
     _priceTicks(scale, count) {
+      if (this.logScale) {
+        const ticks = [];
+        const d0 = Math.floor(Math.log10(scale.min));
+        const d1 = Math.ceil(Math.log10(scale.max));
+        for (let d = d0; d <= d1; d++) {
+          for (const m of [1, 2, 5]) {
+            const v = m * Math.pow(10, d);
+            if (v >= scale.min && v <= scale.max) ticks.push(v);
+          }
+        }
+        return ticks.length ? ticks : [scale.min, scale.max];
+      }
       const range = scale.max - scale.min;
       const rough = range / count;
       const mag = Math.pow(10, Math.floor(Math.log10(rough)));
@@ -582,6 +706,73 @@
       ctx.fillText('RSI (14)', rect.x + 4, rect.y + 11);
     }
 
+    _recalcMACD() {
+      if (!this.candles.length || !window.TA) {
+        this._macd = null;
+        return;
+      }
+      this._macd = window.TA.macd(window.TA.closes(this.candles));
+    }
+
+    _drawMACD(rect) {
+      const ctx = this.ctx;
+      if (!this._macd || this._macd.macd.length !== this.candles.length) this._recalcMACD();
+      const m = this._macd;
+      if (!m) return;
+      const { s, e } = this._visible();
+      let mx = 1e-9;
+      for (let i = s; i < e; i++) {
+        for (const v of [m.macd[i], m.signal[i], m.hist[i]]) if (v != null) mx = Math.max(mx, Math.abs(v));
+      }
+      const yOf = (v) => rect.y + rect.h / 2 - (v / mx) * (rect.h / 2 - 5);
+      // zero line
+      ctx.strokeStyle = this.theme.grid;
+      ctx.lineWidth = 1;
+      const zy = Math.round(yOf(0)) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(rect.x, zy);
+      ctx.lineTo(rect.x + rect.w, zy);
+      ctx.stroke();
+      // histogram
+      const step = this._step(rect);
+      const bw = Math.max(1, Math.min(step * 0.7, 16));
+      for (let i = s; i < e; i++) {
+        const h = m.hist[i];
+        if (h == null) continue;
+        const x = this._xOf(i, rect);
+        const y0 = yOf(0);
+        const y1 = yOf(h);
+        ctx.fillStyle = h >= 0 ? 'rgba(38,161,123,0.5)' : 'rgba(224,86,106,0.5)';
+        ctx.fillRect(Math.round(x - bw / 2), Math.min(y0, y1), Math.round(bw), Math.max(1, Math.abs(y1 - y0)));
+      }
+      const drawLine = (arr, color) => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        let st = false;
+        for (let i = s; i < e; i++) {
+          const v = arr[i];
+          if (v == null) {
+            st = false;
+            continue;
+          }
+          const x = this._xOf(i, rect);
+          const y = yOf(v);
+          if (!st) {
+            ctx.moveTo(x, y);
+            st = true;
+          } else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      };
+      drawLine(m.macd, '#46b3ff');
+      drawLine(m.signal, '#ffb020');
+      ctx.fillStyle = this.theme.axis;
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('MACD (12,26,9)', rect.x + 4, rect.y + 11);
+    }
+
     _drawMarkers(L, yOf) {
       const ctx = this.ctx;
       const { s, e } = this._visible();
@@ -694,7 +885,7 @@
       const minGap = 70;
       let lastX = -Infinity;
       let lastYear = null;
-      const y = L.price.y + L.price.h + (L.vol ? L.vol.h + 8 : 0) + (L.rsi ? L.rsi.h + 8 : 0) + 16;
+      const y = L.price.y + L.price.h + (L.vol ? L.vol.h + 8 : 0) + (L.rsi ? L.rsi.h + 8 : 0) + (L.macd ? L.macd.h + 8 : 0) + 16;
       for (let i = s; i < e; i++) {
         const x = this._xOf(i, L.price);
         if (x - lastX < minGap) continue;
@@ -752,7 +943,7 @@
       ctx.beginPath();
       ctx.moveTo(x, L.price.y);
       const bottom =
-        L.price.y + L.price.h + (L.vol ? L.vol.h + 8 : 0) + (L.rsi ? L.rsi.h + 8 : 0);
+        L.price.y + L.price.h + (L.vol ? L.vol.h + 8 : 0) + (L.rsi ? L.rsi.h + 8 : 0) + (L.macd ? L.macd.h + 8 : 0);
       ctx.lineTo(x, bottom);
       if (this.hover.y >= L.price.y && this.hover.y <= L.price.y + L.price.h) {
         ctx.moveTo(L.price.x, this.hover.y);
