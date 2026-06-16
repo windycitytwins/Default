@@ -113,8 +113,7 @@
       // Network blocked or provider down → deterministic offline demo data.
       const demo = synth(symbol, range === '5d' || interval !== '1d' ? 120 : 260);
       demo.note =
-        'Showing offline demo data — start the server (node server.js) and open it ' +
-        'through http://localhost:5173 for live prices.';
+        'Showing offline demo data — run the local server (node server.js) for live prices.';
       return demo;
     }
   }

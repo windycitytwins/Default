@@ -28,15 +28,24 @@ moving averages, volume, and RSI.
 
 ## Run it
 
+### Option A — just look at it (no setup)
+
+Open **`chart-school.html`** (a single self-contained file) directly in your
+browser. It runs the full tutor on realistic offline demo data — no server, no
+install. Great for a quick look.
+
+### Option B — live market data
+
 Requires **Node.js 18+**. No `npm install` needed — there are no dependencies.
 
 ```bash
 node server.js
 ```
 
-Then open **http://localhost:5173**.
+Then open **http://localhost:8123**.
 
 > Tip: change the port with `PORT=8080 node server.js`.
+> Build/refresh the standalone file with `node build-standalone.js`.
 
 ### Using it
 

@@ -22,7 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 
-const PORT = process.env.PORT || 5173;
+const PORT = process.env.PORT || 8123; // avoids 5173 (Vite's default) to prevent clashes
 const HOST = process.env.HOST || '0.0.0.0';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 

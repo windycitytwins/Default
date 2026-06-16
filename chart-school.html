@@ -1,0 +1,2585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chart School — Learn to Read Stock Charts</title>
+  <!-- Standalone build — open directly in a browser. Uses offline demo data;
+       run `node server.js` for live market data. -->
+  <meta name="description" content="An interactive tutor that teaches you to read stock charts using live market data." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>" />
+  <style>
+:root {
+  --bg: #0a0e17;
+  --panel: #111726;
+  --panel-2: #161d30;
+  --border: #232c42;
+  --text: #e6ebf4;
+  --muted: #8a93a6;
+  --accent: #5b8cff;
+  --accent-2: #46b3ff;
+  --up: #26a17b;
+  --down: #e0566a;
+  --gold: #ffd166;
+  --radius: 12px;
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: radial-gradient(1200px 600px at 80% -10%, #16213a 0%, var(--bg) 55%);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, Helvetica, Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ---------- top bar ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 12px 18px;
+  background: rgba(17, 23, 38, 0.8);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-logo { font-size: 26px; }
+.brand-text { display: flex; flex-direction: column; line-height: 1.2; }
+.brand-text strong { font-size: 16px; letter-spacing: 0.2px; }
+.brand-text span { font-size: 11.5px; color: var(--muted); }
+
+.symbol-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.symbol-input { display: flex; }
+.symbol-input input {
+  width: 150px;
+  padding: 9px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: 9px 0 0 9px;
+  color: var(--text);
+  font-size: 14px;
+  text-transform: uppercase;
+  outline: none;
+}
+.symbol-input input:focus { border-color: var(--accent); }
+.symbol-input input::placeholder { text-transform: none; color: #5c6a86; }
+
+.btn-primary {
+  background: linear-gradient(180deg, #5b8cff, #4570e8);
+  color: #fff;
+  border: none;
+  padding: 9px 16px;
+  border-radius: 0 9px 9px 0;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+.btn-primary:hover { filter: brightness(1.08); }
+.nav-btns .btn-primary { border-radius: 9px; }
+
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 7px 11px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.chip:hover { color: var(--text); border-color: var(--accent); background: #1b2440; }
+
+#rangeSelect {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 9px 10px;
+  border-radius: 9px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.quote { margin-left: auto; text-align: right; }
+.quote-main { display: flex; align-items: baseline; gap: 10px; justify-content: flex-end; }
+.q-symbol { font-weight: 700; font-size: 15px; color: var(--muted); }
+.q-price { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.hdr-change { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.hdr-change.pos { color: var(--up); }
+.hdr-change.neg { color: var(--down); }
+.q-name { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+/* ---------- layout ---------- */
+.layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  min-height: 0;
+}
+.chart-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-right: 1px solid var(--border);
+}
+.chart-host {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.sc-canvas { display: block; }
+.chart-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  font-size: 12px;
+}
+.data-status { font-weight: 500; }
+.data-status.good { color: #6fd3a8; }
+.data-status.warn { color: var(--gold); }
+.data-status.muted { color: var(--muted); }
+.chart-hint { color: #56607a; font-size: 11.5px; }
+
+/* ---------- tutor pane ---------- */
+.tutor-pane {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  min-height: 0;
+}
+.tabs { display: flex; padding: 10px 12px 0; gap: 6px; }
+.tab {
+  flex: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  padding: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  border-radius: 9px 9px 0 0;
+  cursor: pointer;
+}
+.tab.active { color: var(--text); background: var(--panel-2); border-color: var(--border); border-bottom-color: transparent; }
+
+.tutor-view { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+
+/* lesson list */
+.lesson-list { display: flex; flex-direction: column; gap: 6px; }
+.lesson-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  text-align: left;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 11px;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.lesson-item:hover { border-color: #34406a; }
+.lesson-item.active { border-color: var(--accent); background: #18223c; box-shadow: inset 0 0 0 1px rgba(91,140,255,0.4); }
+.li-icon { font-size: 18px; }
+.li-text { display: flex; flex-direction: column; line-height: 1.25; }
+.li-title { font-weight: 600; font-size: 13.5px; }
+.li-sum { font-size: 11.5px; color: var(--muted); }
+
+/* step card */
+.step-card {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.step-lesson { font-size: 12px; color: var(--accent-2); font-weight: 600; margin-bottom: 6px; }
+.step-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.step-head h2 { margin: 0; font-size: 18px; }
+.step-count { font-size: 12px; color: var(--muted); background: #0e1424; padding: 3px 8px; border-radius: 6px; }
+.step-body { margin-top: 10px; font-size: 13.5px; line-height: 1.6; color: #d2d9e8; }
+.step-body p { margin: 0 0 10px; }
+.step-body ul { margin: 0 0 10px; padding-left: 18px; }
+.step-body li { margin-bottom: 4px; }
+.step-body b { color: #fff; }
+
+/* exercise */
+.exercise {
+  margin-top: 14px;
+  padding: 13px;
+  background: #0e1424;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.ex-tag { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; color: var(--gold); text-transform: uppercase; margin-bottom: 7px; }
+.ex-prompt { font-size: 13.5px; font-weight: 600; margin-bottom: 10px; }
+.ex-choices { display: flex; flex-direction: column; gap: 7px; }
+.ex-choice {
+  text-align: left;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.ex-choice:hover:not(.locked) { border-color: var(--accent); }
+.ex-choice.locked { cursor: default; opacity: 0.85; }
+.ex-choice.correct { border-color: var(--up); background: rgba(38,161,123,0.16); color: #aef0d4; }
+.ex-choice.wrong { border-color: var(--down); background: rgba(224,86,106,0.14); color: #ffc3cc; }
+.ex-feedback { margin-top: 10px; font-size: 12.5px; line-height: 1.5; }
+.ex-feedback.ok { color: #7fe3b9; }
+.ex-feedback.no { color: #ffb3bd; }
+.ex-feedback.muted { color: var(--muted); }
+
+/* nav / progress */
+.nav { margin-top: auto; padding-top: 6px; }
+.progress { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.progress-bar { flex: 1; height: 6px; background: #0e1424; border-radius: 999px; overflow: hidden; }
+.progress-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent-2), var(--accent)); transition: width 0.3s; }
+.progress-text { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.nav-btns { display: flex; gap: 8px; }
+.btn-ghost {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 16px;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-ghost:hover:not(:disabled) { border-color: var(--accent); }
+.btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
+.nav-btns .btn-primary { flex: 1; }
+.btn-ghost.wide { width: 100%; }
+
+/* explore */
+.explore-intro { font-size: 13px; color: var(--muted); line-height: 1.55; margin: 0; }
+.control-group { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.control-group h3 { margin: 0 0 9px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+.switch { display: flex; align-items: center; gap: 9px; padding: 5px 0; font-size: 13.5px; cursor: pointer; }
+.switch input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.switch .dot { width: 11px; height: 3px; border-radius: 2px; display: inline-block; margin-right: 2px; }
+.explore-legend { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.explore-legend h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+.explore-legend ul { margin: 0; padding-left: 16px; font-size: 12.5px; line-height: 1.7; color: #d2d9e8; }
+.explore-legend b { color: #fff; }
+.disclaimer { margin: 10px 0 0; font-size: 11px; color: #5c6a86; font-style: italic; }
+
+/* scrollbars */
+.tutor-view::-webkit-scrollbar { width: 9px; }
+.tutor-view::-webkit-scrollbar-thumb { background: #28324c; border-radius: 999px; }
+.tutor-view::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 920px) {
+  body { overflow: auto; }
+  .layout { grid-template-columns: 1fr; }
+  .chart-pane { border-right: none; border-bottom: 1px solid var(--border); height: 56vh; }
+  .tutor-pane { height: auto; }
+  .quote { margin-left: 0; }
+}
+
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-logo">📈</span>
+      <div class="brand-text">
+        <strong>Chart School</strong>
+        <span>Learn to read stock charts — with live data</span>
+      </div>
+    </div>
+
+    <div class="symbol-controls">
+      <div class="symbol-input">
+        <input id="symbolInput" type="text" maxlength="12" spellcheck="false"
+               placeholder="Ticker e.g. AAPL" aria-label="Stock ticker symbol" />
+        <button id="loadBtn" class="btn-primary">Load</button>
+      </div>
+      <div class="chips" role="group" aria-label="Popular tickers">
+        <button class="chip" data-sym="AAPL">AAPL</button>
+        <button class="chip" data-sym="MSFT">MSFT</button>
+        <button class="chip" data-sym="NVDA">NVDA</button>
+        <button class="chip" data-sym="TSLA">TSLA</button>
+        <button class="chip" data-sym="AMZN">AMZN</button>
+        <button class="chip" data-sym="SPY">SPY</button>
+        <button class="chip" data-sym="BTC-USD">BTC</button>
+      </div>
+      <select id="rangeSelect" aria-label="Timeframe">
+        <option value="5d">5D · intraday</option>
+        <option value="6mo">6M · daily</option>
+        <option value="1y" selected>1Y · daily</option>
+        <option value="2y">2Y · daily</option>
+        <option value="5y">5Y · weekly</option>
+      </select>
+    </div>
+
+    <div class="quote">
+      <div class="quote-main">
+        <span id="hdrSymbol" class="q-symbol">—</span>
+        <span id="hdrPrice" class="q-price">—</span>
+        <span id="hdrChange" class="hdr-change">—</span>
+      </div>
+      <div id="hdrName" class="q-name"></div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="chart-pane">
+      <div id="chart" class="chart-host"></div>
+      <div class="chart-footer">
+        <span id="dataStatus" class="data-status muted">Loading…</span>
+        <span class="chart-hint">drag to pan · scroll to zoom · hover for details</span>
+      </div>
+    </section>
+
+    <aside class="tutor-pane">
+      <div class="tabs">
+        <button id="tabLessons" class="tab active">📚 Lessons</button>
+        <button id="tabExplore" class="tab">🔬 Explore</button>
+      </div>
+
+      <!-- LESSONS -->
+      <div id="lessonsView" class="tutor-view">
+        <div class="lesson-list" id="lessonList"></div>
+
+        <div class="step-card">
+          <div id="stepLessonTitle" class="step-lesson"></div>
+          <div class="step-head">
+            <h2 id="stepTitle">Welcome</h2>
+            <span id="stepCount" class="step-count"></span>
+          </div>
+          <div id="stepBody" class="step-body"></div>
+          <div id="exerciseBox" class="exercise" style="display:none"></div>
+        </div>
+
+        <div class="nav">
+          <div class="progress">
+            <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+            <span id="progressText" class="progress-text"></span>
+          </div>
+          <div class="nav-btns">
+            <button id="prevBtn" class="btn-ghost">← Prev</button>
+            <button id="nextBtn" class="btn-primary">Next →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- EXPLORE -->
+      <div id="exploreView" class="tutor-view" style="display:none">
+        <p class="explore-intro">Free sandbox — toggle indicators on the live chart and
+          practise what you learned. Everything is computed from real data.</p>
+
+        <div class="control-group">
+          <h3>Chart type</h3>
+          <label class="switch"><input type="checkbox" data-toggle="mode" /><span>Line instead of candles</span></label>
+        </div>
+
+        <div class="control-group">
+          <h3>Moving averages</h3>
+          <label class="switch"><input type="checkbox" data-toggle="ma20" /><span><i class="dot" style="background:#46b3ff"></i>SMA 20</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="ma50" /><span><i class="dot" style="background:#ffb020"></i>SMA 50</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="ma200" /><span><i class="dot" style="background:#e36bf0"></i>SMA 200</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="ema20" /><span><i class="dot" style="background:#5be0c0"></i>EMA 20</span></label>
+        </div>
+
+        <div class="control-group">
+          <h3>Panels & levels</h3>
+          <label class="switch"><input type="checkbox" data-toggle="volume" checked /><span>Volume</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="rsi" /><span>RSI (14)</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="sr" /><span>Auto support/resistance zones</span></label>
+        </div>
+
+        <button id="resetViewBtn" class="btn-ghost wide">Reset zoom / pan</button>
+
+        <div class="explore-legend">
+          <h3>Cheat sheet</h3>
+          <ul>
+            <li><b>Trend</b> — higher highs+lows = up; lower = down.</li>
+            <li><b>Support/Resistance</b> — floors &amp; ceilings; watch for breaks &amp; bounces.</li>
+            <li><b>MA</b> — direction &amp; dynamic support; crossovers signal momentum shifts.</li>
+            <li><b>Volume</b> — confirms conviction behind a move.</li>
+            <li><b>RSI</b> — &gt;70 overbought, &lt;30 oversold.</li>
+          </ul>
+          <p class="disclaimer">Educational tool only — not financial advice.</p>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+'use strict';
+
+/**
+ * indicators.js — pure technical-analysis math.
+ * Everything here is side-effect free so it's easy to test and reuse.
+ * Exposed on window.TA.
+ */
+(function () {
+  const TA = {};
+
+  /** Simple Moving Average. Returns an array aligned to `values`
+   *  with `null` for the warm-up period. */
+  TA.sma = function (values, period) {
+    const out = new Array(values.length).fill(null);
+    if (period <= 0) return out;
+    let sum = 0;
+    for (let i = 0; i < values.length; i++) {
+      sum += values[i];
+      if (i >= period) sum -= values[i - period];
+      if (i >= period - 1) out[i] = sum / period;
+    }
+    return out;
+  };
+
+  /** Exponential Moving Average. Seeded with an SMA of the first `period`. */
+  TA.ema = function (values, period) {
+    const out = new Array(values.length).fill(null);
+    if (period <= 0 || values.length < period) return out;
+    const k = 2 / (period + 1);
+    let seed = 0;
+    for (let i = 0; i < period; i++) seed += values[i];
+    let prev = seed / period;
+    out[period - 1] = prev;
+    for (let i = period; i < values.length; i++) {
+      prev = values[i] * k + prev * (1 - k);
+      out[i] = prev;
+    }
+    return out;
+  };
+
+  /** Wilder's RSI (0-100). */
+  TA.rsi = function (closes, period = 14) {
+    const out = new Array(closes.length).fill(null);
+    if (closes.length <= period) return out;
+    let gain = 0;
+    let loss = 0;
+    for (let i = 1; i <= period; i++) {
+      const ch = closes[i] - closes[i - 1];
+      if (ch >= 0) gain += ch;
+      else loss -= ch;
+    }
+    let avgGain = gain / period;
+    let avgLoss = loss / period;
+    out[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    for (let i = period + 1; i < closes.length; i++) {
+      const ch = closes[i] - closes[i - 1];
+      const g = ch > 0 ? ch : 0;
+      const l = ch < 0 ? -ch : 0;
+      avgGain = (avgGain * (period - 1) + g) / period;
+      avgLoss = (avgLoss * (period - 1) + l) / period;
+      out[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    }
+    return out;
+  };
+
+  /** Detect swing pivots: local highs/lows over a +/- `lookback` window. */
+  TA.pivots = function (candles, lookback = 5) {
+    const highs = [];
+    const lows = [];
+    for (let i = lookback; i < candles.length - lookback; i++) {
+      let isHigh = true;
+      let isLow = true;
+      for (let j = i - lookback; j <= i + lookback; j++) {
+        if (j === i) continue;
+        if (candles[j].high >= candles[i].high) isHigh = false;
+        if (candles[j].low <= candles[i].low) isLow = false;
+      }
+      if (isHigh) highs.push({ i, price: candles[i].high });
+      if (isLow) lows.push({ i, price: candles[i].low });
+    }
+    return { highs, lows };
+  };
+
+  /**
+   * Cluster swing pivots into horizontal support/resistance ZONES.
+   * Returns levels sorted by "strength" (number of touches), each with a
+   * price band [lo, hi] and the candle indices that touched it.
+   */
+  TA.supportResistance = function (candles, opts = {}) {
+    const lookback = opts.lookback || 5;
+    const maxLevels = opts.maxLevels || 6;
+    const { highs, lows } = TA.pivots(candles, lookback);
+    const pts = highs
+      .map((p) => ({ ...p, kind: 'res' }))
+      .concat(lows.map((p) => ({ ...p, kind: 'sup' })))
+      .sort((a, b) => a.price - b.price);
+    if (!pts.length) return [];
+
+    // Tolerance scales with price (1.2% band by default).
+    const tol = opts.tolerance || 0.012;
+    const clusters = [];
+    let cur = [pts[0]];
+    for (let i = 1; i < pts.length; i++) {
+      const ref = cur[cur.length - 1].price;
+      if (Math.abs(pts[i].price - ref) / ref <= tol) {
+        cur.push(pts[i]);
+      } else {
+        clusters.push(cur);
+        cur = [pts[i]];
+      }
+    }
+    clusters.push(cur);
+
+    const lastClose = candles[candles.length - 1].close;
+    const levels = clusters
+      .map((cl) => {
+        const prices = cl.map((p) => p.price);
+        const lo = Math.min(...prices);
+        const hi = Math.max(...prices);
+        const mid = prices.reduce((a, b) => a + b, 0) / prices.length;
+        return {
+          lo,
+          hi,
+          mid,
+          touches: cl.length,
+          indices: cl.map((p) => p.i),
+          // Below the current price it acts as support, above as resistance.
+          role: mid < lastClose ? 'support' : 'resistance'
+        };
+      })
+      .filter((lvl) => lvl.touches >= (opts.minTouches || 2))
+      .sort((a, b) => b.touches - a.touches)
+      .slice(0, maxLevels);
+
+    return levels;
+  };
+
+  /** Classify the prevailing trend from a moving average's slope. */
+  TA.trend = function (closes, period = 50) {
+    const ma = TA.sma(closes, period);
+    const last = ma[ma.length - 1];
+    const prev = ma[ma.length - Math.min(period, 20)];
+    if (last == null || prev == null) return { dir: 'unknown', strength: 0 };
+    const change = (last - prev) / prev;
+    let dir = 'sideways';
+    if (change > 0.02) dir = 'up';
+    else if (change < -0.02) dir = 'down';
+    return { dir, strength: change };
+  };
+
+  /** Find moving-average crossover points between two series. */
+  TA.crossovers = function (fast, slow) {
+    const events = [];
+    for (let i = 1; i < fast.length; i++) {
+      if (fast[i] == null || slow[i] == null || fast[i - 1] == null || slow[i - 1] == null)
+        continue;
+      const prevDiff = fast[i - 1] - slow[i - 1];
+      const diff = fast[i] - slow[i];
+      if (prevDiff <= 0 && diff > 0) events.push({ i, type: 'golden' });
+      else if (prevDiff >= 0 && diff < 0) events.push({ i, type: 'death' });
+    }
+    return events;
+  };
+
+  TA.closes = (candles) => candles.map((c) => c.close);
+
+  window.TA = TA;
+})();
+
+</script>
+  <script>
+'use strict';
+
+/**
+ * data.js — loads market data for a symbol.
+ *
+ * Primary path:  GET /api/chart  (served by our Node proxy → Yahoo/Stooq).
+ * Fallback path: a deterministic synthetic generator so every lesson still
+ *                renders something sensible when there's no network at all.
+ *
+ * Exposed on window.MarketData.
+ */
+(function () {
+  // Deterministic PRNG (mulberry32) so a given symbol always looks the same.
+  function makeRng(seedStr) {
+    let h = 1779033703 ^ seedStr.length;
+    for (let i = 0; i < seedStr.length; i++) {
+      h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353);
+      h = (h << 13) | (h >>> 19);
+    }
+    let a = h >>> 0;
+    return function () {
+      a |= 0;
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /**
+   * Build ~`bars` daily candles that contain genuine trends, pullbacks,
+   * a couple of horizontal support/resistance shelves and an MA crossover —
+   * i.e. everything the lessons need to point at.
+   */
+  function synth(symbol, bars = 260) {
+    const rng = makeRng('seed::' + symbol.toUpperCase());
+    const candles = [];
+    let price = 40 + rng() * 160; // starting price 40-200
+    let drift = (rng() - 0.45) * 0.0016; // slight bias
+    const baseVol = 0.014 + rng() * 0.01;
+
+    const now = Date.now();
+    const dayMs = 24 * 3600 * 1000;
+    // Pre-pick a few "regimes" so the chart isn't a single straight line.
+    let regimeLeft = 0;
+
+    for (let i = 0; i < bars; i++) {
+      if (regimeLeft <= 0) {
+        regimeLeft = 25 + Math.floor(rng() * 45);
+        drift = (rng() - 0.5) * 0.005; // new trend direction
+      }
+      regimeLeft--;
+
+      const shock = (rng() - 0.5) * baseVol * 2;
+      const ret = drift + shock;
+      const open = price;
+      let close = open * (1 + ret);
+
+      // Occasional gentle mean reversion keeps prices in a believable range.
+      if (close < 5) close = open * 1.02;
+
+      const hi = Math.max(open, close) * (1 + rng() * baseVol);
+      const lo = Math.min(open, close) * (1 - rng() * baseVol);
+      const vol = Math.round((0.6 + rng() * 1.4) * 1e6 * (1 + Math.abs(ret) * 30));
+
+      // Weekday timestamps only (skip Sat/Sun) for realism.
+      let dayOffset = bars - i;
+      const t = new Date(now - dayOffset * dayMs);
+      const wd = t.getUTCDay();
+      if (wd === 0 || wd === 6) {
+        // nudge to Friday/Monday — purely cosmetic for axis labels
+      }
+
+      candles.push({
+        time: t.getTime(),
+        open: round2(open),
+        high: round2(hi),
+        low: round2(lo),
+        close: round2(close),
+        volume: vol
+      });
+      price = close;
+    }
+    return {
+      symbol: symbol.toUpperCase(),
+      currency: 'USD',
+      exchange: 'DEMO',
+      interval: '1d',
+      range: '1y',
+      source: 'Demo data (offline)',
+      synthetic: true,
+      name: 'Sample Series',
+      candles
+    };
+  }
+
+  function round2(n) {
+    return Math.round(n * 100) / 100;
+  }
+
+  async function load(symbol, range = '1y', interval = '1d') {
+    const url = `/api/chart?symbol=${encodeURIComponent(symbol)}&range=${encodeURIComponent(
+      range
+    )}&interval=${encodeURIComponent(interval)}`;
+    try {
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      const json = await res.json();
+      if (!res.ok || json.error || !Array.isArray(json.candles) || json.candles.length < 2) {
+        throw new Error(json.message || 'No live data');
+      }
+      return json;
+    } catch (err) {
+      // Network blocked or provider down → deterministic offline demo data.
+      const demo = synth(symbol, range === '5d' || interval !== '1d' ? 120 : 260);
+      demo.note =
+        'Showing offline demo data — run the local server (node server.js) for live prices.';
+      return demo;
+    }
+  }
+
+  window.MarketData = { load, synth };
+})();
+
+</script>
+  <script>
+'use strict';
+
+/**
+ * chart.js — a small, dependency-free candlestick charting engine built on
+ * <canvas>, designed specifically for *teaching*. Beyond drawing candles it
+ * can render the things a tutor needs to point at:
+ *
+ *   • moving-average / indicator line overlays
+ *   • horizontal levels and shaded support/resistance zones
+ *   • markers pinned to individual candles (e.g. "golden cross")
+ *   • callout annotations connected to a price/candle anchor
+ *   • highlighted candle ranges ("look at this pullback")
+ *   • a crosshair with an OHLC tooltip
+ *   • click → {index, price} mapping for interactive exercises
+ *   • drag to pan, wheel to zoom
+ *
+ * Exposed as window.StockChart.
+ */
+(function () {
+  const THEME = {
+    bg: '#0e1320',
+    grid: 'rgba(255,255,255,0.05)',
+    axis: '#8a93a6',
+    text: '#c7cedb',
+    up: '#26a17b',
+    down: '#e0566a',
+    upWick: '#26a17b',
+    downWick: '#e0566a',
+    crosshair: 'rgba(255,255,255,0.35)',
+    volUp: 'rgba(38,161,123,0.45)',
+    volDown: 'rgba(224,86,106,0.45)'
+  };
+
+  function fmtPrice(n) {
+    if (n == null || isNaN(n)) return '–';
+    if (Math.abs(n) >= 1000) return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    if (Math.abs(n) >= 100) return n.toFixed(2);
+    return n.toFixed(2);
+  }
+  function fmtVol(n) {
+    if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+    return String(n);
+  }
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function fmtDate(ms, withYear) {
+    const d = new Date(ms);
+    const base = `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+    return withYear ? `${base} '${String(d.getFullYear()).slice(2)}` : base;
+  }
+
+  class StockChart {
+    constructor(container, opts = {}) {
+      this.container = container;
+      this.opts = opts;
+      this.theme = Object.assign({}, THEME, opts.theme || {});
+      this.canvas = document.createElement('canvas');
+      this.canvas.className = 'sc-canvas';
+      container.appendChild(this.canvas);
+      this.ctx = this.canvas.getContext('2d');
+
+      this.candles = [];
+      this.mode = 'candles'; // 'candles' | 'line'
+      this.flags = { volume: true, rsi: false };
+
+      this.overlays = new Map(); // id -> {data:[null|num], color, width, label, dash}
+      this.hlines = new Map(); // id -> {price, color, label, dash}
+      this.zones = new Map(); // id -> {lo, hi, color, label}
+      this.markers = []; // {index, side, color, text, shape}
+      this.annotations = []; // {index, price, text, color, dx, dy}
+      this.highlights = []; // {from, to, color, label}
+
+      this.visStart = 0;
+      this.visCount = 120;
+      this.hover = null; // {index, x, y}
+      this.listeners = { click: [], hover: [] };
+      this.clickMode = false;
+
+      this._pad = { top: 14, right: 64, bottom: 26, left: 8 };
+      this._setupEvents();
+      this._ro = new ResizeObserver(() => this._resize());
+      this._ro.observe(container);
+      this._resize();
+    }
+
+    // ---- public API --------------------------------------------------------
+    setData(data) {
+      this.meta = data;
+      this.candles = data.candles || [];
+      this.visCount = Math.min(this.candles.length, this.opts.initialBars || 130);
+      this.visStart = Math.max(0, this.candles.length - this.visCount);
+      this._recalcRSI();
+      this.requestRender();
+      return this;
+    }
+    setMode(m) {
+      this.mode = m;
+      this.requestRender();
+    }
+    toggle(flag, on) {
+      this.flags[flag] = on;
+      if (flag === 'rsi' && on) this._recalcRSI();
+      this.requestRender();
+    }
+    setOverlay(id, cfg) {
+      this.overlays.set(id, cfg);
+      this.requestRender();
+    }
+    removeOverlay(id) {
+      this.overlays.delete(id);
+      this.requestRender();
+    }
+    clearOverlays() {
+      this.overlays.clear();
+      this.requestRender();
+    }
+    setHLine(id, cfg) {
+      this.hlines.set(id, cfg);
+      this.requestRender();
+    }
+    removeHLine(id) {
+      this.hlines.delete(id);
+      this.requestRender();
+    }
+    setZone(id, cfg) {
+      this.zones.set(id, cfg);
+      this.requestRender();
+    }
+    clearZones() {
+      this.zones.clear();
+      this.requestRender();
+    }
+    setMarkers(arr) {
+      this.markers = arr || [];
+      this.requestRender();
+    }
+    clearMarkers() {
+      this.markers = [];
+      this.requestRender();
+    }
+    setAnnotations(arr) {
+      this.annotations = arr || [];
+      this.requestRender();
+    }
+    clearAnnotations() {
+      this.annotations = [];
+      this.requestRender();
+    }
+    setHighlights(arr) {
+      this.highlights = arr || [];
+      this.requestRender();
+    }
+    clearHighlights() {
+      this.highlights = [];
+      this.requestRender();
+    }
+    /** Clear everything a lesson might have drawn. */
+    clearTeaching() {
+      this.overlays.clear();
+      this.hlines.clear();
+      this.zones.clear();
+      this.markers = [];
+      this.annotations = [];
+      this.highlights = [];
+      this.requestRender();
+    }
+    enableClickToMark(on) {
+      this.clickMode = on;
+      this.canvas.style.cursor = on ? 'crosshair' : 'default';
+    }
+    on(evt, cb) {
+      if (this.listeners[evt]) this.listeners[evt].push(cb);
+      return this;
+    }
+    off(evt, cb) {
+      if (this.listeners[evt]) this.listeners[evt] = this.listeners[evt].filter((f) => f !== cb);
+    }
+
+    /** Move the visible window so [from,to] is comfortably in view. */
+    focusRange(from, to, padFrac = 0.25) {
+      if (this.candles.length === 0) return;
+      from = Math.max(0, from);
+      to = Math.min(this.candles.length - 1, to);
+      const span = Math.max(8, to - from);
+      const pad = Math.round(span * padFrac);
+      this.visStart = Math.max(0, from - pad);
+      const end = Math.min(this.candles.length, to + pad + 1);
+      this.visCount = Math.max(10, end - this.visStart);
+      this.requestRender();
+    }
+    resetView() {
+      this.visCount = Math.min(this.candles.length, this.opts.initialBars || 130);
+      this.visStart = Math.max(0, this.candles.length - this.visCount);
+      this.requestRender();
+    }
+
+    // ---- geometry helpers --------------------------------------------------
+    _layout() {
+      const W = this.cssW;
+      const H = this.cssH;
+      const p = this._pad;
+      const innerH = H - p.top - p.bottom;
+      let volH = this.flags.volume ? Math.max(46, innerH * 0.16) : 0;
+      let rsiH = this.flags.rsi ? Math.max(54, innerH * 0.2) : 0;
+      const gap = (this.flags.volume || this.flags.rsi) ? 8 : 0;
+      const priceH = innerH - volH - rsiH - (this.flags.volume ? gap : 0) - (this.flags.rsi ? gap : 0);
+      const x = p.left;
+      const w = W - p.left - p.right;
+      let y = p.top;
+      const price = { x, y, w, h: priceH };
+      y += priceH + (this.flags.volume ? gap : 0);
+      const vol = this.flags.volume ? { x, y, w, h: volH } : null;
+      if (this.flags.volume) y += volH;
+      y += this.flags.rsi ? gap : 0;
+      const rsi = this.flags.rsi ? { x, y, w, h: rsiH } : null;
+      return { price, vol, rsi, W, H };
+    }
+    _visible() {
+      const s = this.visStart;
+      const e = Math.min(this.candles.length, s + this.visCount);
+      return { s, e };
+    }
+    _step(rect) {
+      return rect.w / this.visCount;
+    }
+    _xOf(i, rect) {
+      return rect.x + (i - this.visStart + 0.5) * this._step(rect);
+    }
+    _iOf(px, rect) {
+      return Math.round((px - rect.x) / this._step(rect) - 0.5) + this.visStart;
+    }
+
+    _priceScale() {
+      const { s, e } = this._visible();
+      let min = Infinity;
+      let max = -Infinity;
+      for (let i = s; i < e; i++) {
+        const c = this.candles[i];
+        if (c.low < min) min = c.low;
+        if (c.high > max) max = c.high;
+      }
+      // include visible overlay (MA) values so lines never clip off-screen
+      for (const ov of this.overlays.values()) {
+        for (let i = s; i < e; i++) {
+          const v = ov.data[i];
+          if (v == null) continue;
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
+      }
+      if (!isFinite(min) || !isFinite(max)) {
+        min = 0;
+        max = 1;
+      }
+      const span = max - min || max || 1;
+      min -= span * 0.08;
+      max += span * 0.08;
+      return { min, max };
+    }
+
+    // ---- rendering ---------------------------------------------------------
+    requestRender() {
+      if (this._raf) return;
+      this._raf = requestAnimationFrame(() => {
+        this._raf = null;
+        this.render();
+      });
+    }
+
+    render() {
+      const ctx = this.ctx;
+      const L = this._layout();
+      ctx.clearRect(0, 0, this.cssW, this.cssH);
+      ctx.fillStyle = this.theme.bg;
+      ctx.fillRect(0, 0, this.cssW, this.cssH);
+      if (!this.candles.length) {
+        ctx.fillStyle = this.theme.axis;
+        ctx.font = '13px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Loading…', this.cssW / 2, this.cssH / 2);
+        return;
+      }
+      const scale = this._priceScale();
+      this._scale = scale;
+      this._L = L;
+      const yOf = (price) =>
+        L.price.y + L.price.h - ((price - scale.min) / (scale.max - scale.min)) * L.price.h;
+      this._yOf = yOf;
+      this._priceOf = (py) =>
+        scale.min + ((L.price.y + L.price.h - py) / L.price.h) * (scale.max - scale.min);
+
+      this._drawGrid(L, scale, yOf);
+      this._drawZones(L, yOf);
+      this._drawHighlights(L);
+      if (this.mode === 'candles') this._drawCandles(L, yOf);
+      else this._drawLine(L, yOf);
+      this._drawOverlays(L, yOf);
+      this._drawHLines(L, yOf);
+      if (this.flags.volume && L.vol) this._drawVolume(L.vol);
+      if (this.flags.rsi && L.rsi) this._drawRSI(L.rsi);
+      this._drawMarkers(L, yOf);
+      this._drawAnnotations(L, yOf);
+      this._drawPriceAxis(L, scale, yOf);
+      this._drawTimeAxis(L);
+      this._drawCrosshair(L, yOf);
+      this._drawLastPrice(L, yOf);
+    }
+
+    _drawGrid(L, scale, yOf) {
+      const ctx = this.ctx;
+      ctx.strokeStyle = this.theme.grid;
+      ctx.lineWidth = 1;
+      const ticks = this._priceTicks(scale, 6);
+      ctx.beginPath();
+      for (const t of ticks) {
+        const y = Math.round(yOf(t)) + 0.5;
+        ctx.moveTo(L.price.x, y);
+        ctx.lineTo(L.price.x + L.price.w, y);
+      }
+      ctx.stroke();
+    }
+
+    _priceTicks(scale, count) {
+      const range = scale.max - scale.min;
+      const rough = range / count;
+      const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+      const norm = rough / mag;
+      let step;
+      if (norm < 1.5) step = 1;
+      else if (norm < 3) step = 2;
+      else if (norm < 7) step = 5;
+      else step = 10;
+      step *= mag;
+      const ticks = [];
+      const start = Math.ceil(scale.min / step) * step;
+      for (let v = start; v <= scale.max; v += step) ticks.push(v);
+      return ticks;
+    }
+
+    _drawZones(L, yOf) {
+      const ctx = this.ctx;
+      for (const [, z] of this.zones) {
+        const yHi = yOf(z.hi);
+        const yLo = yOf(z.lo);
+        const top = Math.min(yHi, yLo);
+        const h = Math.max(2, Math.abs(yLo - yHi));
+        ctx.fillStyle = z.color || 'rgba(120,160,255,0.16)';
+        ctx.fillRect(L.price.x, top, L.price.w, h);
+        if (z.label) {
+          ctx.fillStyle = z.labelColor || 'rgba(200,220,255,0.9)';
+          ctx.font = '11px system-ui, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText(z.label, L.price.x + 8, top + 13);
+        }
+      }
+    }
+
+    _drawHighlights(L) {
+      const ctx = this.ctx;
+      for (const h of this.highlights) {
+        const x0 = this._xOf(h.from, L.price) - this._step(L.price) / 2;
+        const x1 = this._xOf(h.to, L.price) + this._step(L.price) / 2;
+        ctx.fillStyle = h.color || 'rgba(255,205,80,0.12)';
+        ctx.fillRect(x0, L.price.y, x1 - x0, L.price.h + (L.vol ? L.vol.h + 8 : 0));
+        if (h.label) {
+          ctx.fillStyle = h.labelColor || 'rgba(255,224,150,0.95)';
+          ctx.font = '11px system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(h.label, (x0 + x1) / 2, L.price.y + 12);
+        }
+      }
+    }
+
+    _drawCandles(L, yOf) {
+      const ctx = this.ctx;
+      const { s, e } = this._visible();
+      const step = this._step(L.price);
+      const bw = Math.max(1, Math.min(step * 0.7, 18));
+      for (let i = s; i < e; i++) {
+        const c = this.candles[i];
+        const x = this._xOf(i, L.price);
+        const up = c.close >= c.open;
+        const col = up ? this.theme.up : this.theme.down;
+        ctx.strokeStyle = up ? this.theme.upWick : this.theme.downWick;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(Math.round(x) + 0.5, yOf(c.high));
+        ctx.lineTo(Math.round(x) + 0.5, yOf(c.low));
+        ctx.stroke();
+        const yO = yOf(c.open);
+        const yC = yOf(c.close);
+        const top = Math.min(yO, yC);
+        const bh = Math.max(1, Math.abs(yC - yO));
+        ctx.fillStyle = col;
+        ctx.fillRect(Math.round(x - bw / 2), Math.round(top), Math.round(bw), Math.max(1, Math.round(bh)));
+      }
+    }
+
+    _drawLine(L, yOf) {
+      const ctx = this.ctx;
+      const { s, e } = this._visible();
+      ctx.strokeStyle = '#5b8cff';
+      ctx.lineWidth = 1.8;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      let started = false;
+      for (let i = s; i < e; i++) {
+        const x = this._xOf(i, L.price);
+        const y = yOf(this.candles[i].close);
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+        } else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      // soft fill under the line
+      const grad = ctx.createLinearGradient(0, L.price.y, 0, L.price.y + L.price.h);
+      grad.addColorStop(0, 'rgba(91,140,255,0.18)');
+      grad.addColorStop(1, 'rgba(91,140,255,0)');
+      ctx.lineTo(this._xOf(e - 1, L.price), L.price.y + L.price.h);
+      ctx.lineTo(this._xOf(s, L.price), L.price.y + L.price.h);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
+
+    _drawOverlays(L, yOf) {
+      const ctx = this.ctx;
+      const { s, e } = this._visible();
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(L.price.x, L.price.y, L.price.w, L.price.h);
+      ctx.clip();
+      for (const [, ov] of this.overlays) {
+        ctx.strokeStyle = ov.color;
+        ctx.lineWidth = ov.width || 1.6;
+        ctx.setLineDash(ov.dash || []);
+        ctx.beginPath();
+        let started = false;
+        for (let i = s; i < e; i++) {
+          const v = ov.data[i];
+          if (v == null) {
+            started = false;
+            continue;
+          }
+          const x = this._xOf(i, L.price);
+          const y = yOf(v);
+          if (!started) {
+            ctx.moveTo(x, y);
+            started = true;
+          } else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    _drawHLines(L, yOf) {
+      const ctx = this.ctx;
+      for (const [, ln] of this.hlines) {
+        const y = Math.round(yOf(ln.price)) + 0.5;
+        if (y < L.price.y - 2 || y > L.price.y + L.price.h + 2) continue;
+        ctx.strokeStyle = ln.color || '#ffd166';
+        ctx.lineWidth = ln.width || 1.4;
+        ctx.setLineDash(ln.dash || [6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(L.price.x, y);
+        ctx.lineTo(L.price.x + L.price.w, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const tag = (ln.label ? ln.label + '  ' : '') + fmtPrice(ln.price);
+        ctx.font = '11px system-ui, sans-serif';
+        const tw = ctx.measureText(tag).width + 10;
+        ctx.fillStyle = ln.color || '#ffd166';
+        ctx.fillRect(L.price.x + L.price.w - tw, y - 8, tw, 16);
+        ctx.fillStyle = '#0e1320';
+        ctx.textAlign = 'right';
+        ctx.fillText(tag, L.price.x + L.price.w - 5, y + 4);
+      }
+    }
+
+    _drawVolume(rect) {
+      const ctx = this.ctx;
+      const { s, e } = this._visible();
+      let maxV = 0;
+      for (let i = s; i < e; i++) if (this.candles[i].volume > maxV) maxV = this.candles[i].volume;
+      if (maxV <= 0) maxV = 1;
+      const step = this._step(rect);
+      const bw = Math.max(1, Math.min(step * 0.7, 18));
+      for (let i = s; i < e; i++) {
+        const c = this.candles[i];
+        const h = (c.volume / maxV) * (rect.h - 4);
+        const x = this._xOf(i, rect);
+        ctx.fillStyle = c.close >= c.open ? this.theme.volUp : this.theme.volDown;
+        ctx.fillRect(Math.round(x - bw / 2), rect.y + rect.h - h, Math.round(bw), h);
+      }
+      ctx.fillStyle = this.theme.axis;
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('Volume', rect.x + 4, rect.y + 11);
+    }
+
+    _recalcRSI() {
+      if (!this.candles.length || !window.TA) {
+        this._rsi = null;
+        return;
+      }
+      this._rsi = window.TA.rsi(window.TA.closes(this.candles), 14);
+    }
+
+    _drawRSI(rect) {
+      const ctx = this.ctx;
+      if (!this._rsi) this._recalcRSI();
+      const rsi = this._rsi;
+      const { s, e } = this._visible();
+      const yOf = (v) => rect.y + rect.h - (v / 100) * rect.h;
+      // bands
+      ctx.fillStyle = 'rgba(224,86,106,0.08)';
+      ctx.fillRect(rect.x, yOf(100), rect.w, yOf(70) - yOf(100));
+      ctx.fillStyle = 'rgba(38,161,123,0.08)';
+      ctx.fillRect(rect.x, yOf(30), rect.w, yOf(0) - yOf(30));
+      ctx.strokeStyle = this.theme.grid;
+      ctx.setLineDash([4, 4]);
+      [30, 50, 70].forEach((lvl) => {
+        const y = Math.round(yOf(lvl)) + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(rect.x, y);
+        ctx.lineTo(rect.x + rect.w, y);
+        ctx.stroke();
+        ctx.fillStyle = this.theme.axis;
+        ctx.font = '10px system-ui, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(String(lvl), rect.x + rect.w + 30, y + 3);
+      });
+      ctx.setLineDash([]);
+      ctx.strokeStyle = '#b083ff';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      let started = false;
+      for (let i = s; i < e; i++) {
+        const v = rsi[i];
+        if (v == null) {
+          started = false;
+          continue;
+        }
+        const x = this._xOf(i, rect);
+        const y = yOf(v);
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+        } else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.fillStyle = this.theme.axis;
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('RSI (14)', rect.x + 4, rect.y + 11);
+    }
+
+    _drawMarkers(L, yOf) {
+      const ctx = this.ctx;
+      const { s, e } = this._visible();
+      for (const m of this.markers) {
+        if (m.index < s || m.index >= e) continue;
+        const c = this.candles[m.index];
+        const x = this._xOf(m.index, L.price);
+        const above = m.side !== 'below';
+        const y = above ? yOf(c.high) - 14 : yOf(c.low) + 14;
+        ctx.fillStyle = m.color || '#ffd166';
+        // triangle
+        ctx.beginPath();
+        if (above) {
+          ctx.moveTo(x, y + 8);
+          ctx.lineTo(x - 6, y);
+          ctx.lineTo(x + 6, y);
+        } else {
+          ctx.moveTo(x, y - 8);
+          ctx.lineTo(x - 6, y);
+          ctx.lineTo(x + 6, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        if (m.text) {
+          ctx.font = '11px system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          const tw = ctx.measureText(m.text).width + 10;
+          const ty = above ? y - 9 : y + 9;
+          ctx.fillStyle = m.color || '#ffd166';
+          ctx.fillRect(x - tw / 2, above ? ty - 13 : ty, tw, 15);
+          ctx.fillStyle = '#0e1320';
+          ctx.fillText(m.text, x, above ? ty - 2 : ty + 11);
+        }
+      }
+    }
+
+    _drawAnnotations(L, yOf) {
+      const ctx = this.ctx;
+      const { s, e } = this._visible();
+      for (const a of this.annotations) {
+        if (a.index < s || a.index >= e) continue;
+        const ax = this._xOf(a.index, L.price);
+        const ay = a.price != null ? yOf(a.price) : yOf(this.candles[a.index].close);
+        const dx = a.dx == null ? 40 : a.dx;
+        const dy = a.dy == null ? -36 : a.dy;
+        const bx = ax + dx;
+        const by = ay + dy;
+        ctx.strokeStyle = a.color || '#7aa2ff';
+        ctx.fillStyle = a.color || '#7aa2ff';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(bx, by);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(ax, ay, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.font = '12px system-ui, sans-serif';
+        const lines = String(a.text).split('\n');
+        let maxw = 0;
+        lines.forEach((l) => (maxw = Math.max(maxw, ctx.measureText(l).width)));
+        const padX = 8;
+        const lh = 15;
+        const boxW = maxw + padX * 2;
+        const boxH = lines.length * lh + 8;
+        let boxX = dx >= 0 ? bx : bx - boxW;
+        let boxY = by - boxH / 2;
+        boxX = Math.max(L.price.x + 2, Math.min(boxX, L.price.x + L.price.w - boxW - 2));
+        boxY = Math.max(L.price.y + 2, Math.min(boxY, L.price.y + L.price.h - boxH - 2));
+        ctx.fillStyle = 'rgba(20,26,40,0.92)';
+        ctx.strokeStyle = a.color || '#7aa2ff';
+        this._roundRect(boxX, boxY, boxW, boxH, 6);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = a.textColor || '#e8edf6';
+        ctx.textAlign = 'left';
+        lines.forEach((l, i) => ctx.fillText(l, boxX + padX, boxY + 16 + i * lh));
+      }
+    }
+
+    _roundRect(x, y, w, h, r) {
+      const ctx = this.ctx;
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    _drawPriceAxis(L, scale, yOf) {
+      const ctx = this.ctx;
+      ctx.fillStyle = this.theme.text;
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      for (const t of this._priceTicks(scale, 6)) {
+        const y = yOf(t);
+        if (y < L.price.y - 4 || y > L.price.y + L.price.h + 4) continue;
+        ctx.fillText(fmtPrice(t), L.price.x + L.price.w + 6, y + 4);
+      }
+    }
+
+    _drawTimeAxis(L) {
+      const ctx = this.ctx;
+      const { s, e } = this._visible();
+      ctx.fillStyle = this.theme.text;
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      const minGap = 70;
+      let lastX = -Infinity;
+      let lastYear = null;
+      const y = L.price.y + L.price.h + (L.vol ? L.vol.h + 8 : 0) + (L.rsi ? L.rsi.h + 8 : 0) + 16;
+      for (let i = s; i < e; i++) {
+        const x = this._xOf(i, L.price);
+        if (x - lastX < minGap) continue;
+        const d = new Date(this.candles[i].time);
+        const yr = d.getFullYear();
+        ctx.fillText(fmtDate(this.candles[i].time, yr !== lastYear), x, y);
+        lastYear = yr;
+        lastX = x;
+      }
+    }
+
+    _drawLastPrice(L, yOf) {
+      const ctx = this.ctx;
+      const last = this.candles[this.candles.length - 1];
+      if (!last) return;
+      const y = yOf(last.close);
+      if (y < L.price.y || y > L.price.y + L.price.h) return;
+      const up = last.close >= last.open;
+      ctx.strokeStyle = up ? this.theme.up : this.theme.down;
+      ctx.setLineDash([2, 3]);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(L.price.x, y);
+      ctx.lineTo(L.price.x + L.price.w, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const tag = fmtPrice(last.close);
+      ctx.font = 'bold 11px system-ui, sans-serif';
+      const tw = ctx.measureText(tag).width + 10;
+      ctx.fillStyle = up ? this.theme.up : this.theme.down;
+      ctx.fillRect(L.price.x + L.price.w, y - 8, tw, 16);
+      ctx.fillStyle = '#0e1320';
+      ctx.textAlign = 'left';
+      ctx.fillText(tag, L.price.x + L.price.w + 5, y + 4);
+    }
+
+    _drawCrosshair(L, yOf) {
+      if (!this.hover) return;
+      const ctx = this.ctx;
+      const { s, e } = this._visible();
+      const i = Math.max(s, Math.min(e - 1, this.hover.index));
+      const c = this.candles[i];
+      if (!c) return;
+      const x = this._xOf(i, L.price);
+      ctx.strokeStyle = this.theme.crosshair;
+      ctx.setLineDash([3, 3]);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, L.price.y);
+      const bottom =
+        L.price.y + L.price.h + (L.vol ? L.vol.h + 8 : 0) + (L.rsi ? L.rsi.h + 8 : 0);
+      ctx.lineTo(x, bottom);
+      if (this.hover.y >= L.price.y && this.hover.y <= L.price.y + L.price.h) {
+        ctx.moveTo(L.price.x, this.hover.y);
+        ctx.lineTo(L.price.x + L.price.w, this.hover.y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // price tag on axis
+      if (this.hover.y >= L.price.y && this.hover.y <= L.price.y + L.price.h) {
+        const p = this._priceOf(this.hover.y);
+        const tag = fmtPrice(p);
+        ctx.font = '11px system-ui, sans-serif';
+        const tw = ctx.measureText(tag).width + 10;
+        ctx.fillStyle = '#2a3550';
+        ctx.fillRect(L.price.x + L.price.w, this.hover.y - 8, tw, 16);
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'left';
+        ctx.fillText(tag, L.price.x + L.price.w + 5, this.hover.y + 4);
+      }
+      this._drawTooltip(L, i, c, x);
+    }
+
+    _drawTooltip(L, i, c, x) {
+      const ctx = this.ctx;
+      const up = c.close >= c.open;
+      const chg = i > 0 ? c.close - this.candles[i - 1].close : 0;
+      const chgPct = i > 0 ? (chg / this.candles[i - 1].close) * 100 : 0;
+      const rows = [
+        [fmtDate(c.time, true), ''],
+        ['O', fmtPrice(c.open)],
+        ['H', fmtPrice(c.high)],
+        ['L', fmtPrice(c.low)],
+        ['C', fmtPrice(c.close)],
+        ['Vol', fmtVol(c.volume)],
+        ['Chg', `${chg >= 0 ? '+' : ''}${fmtPrice(chg)} (${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%)`]
+      ];
+      // include overlay values
+      for (const [id, ov] of this.overlays) {
+        const v = ov.data[i];
+        if (v != null) rows.push([ov.label || id, fmtPrice(v), ov.color]);
+      }
+      ctx.font = '11px system-ui, sans-serif';
+      let w = 0;
+      rows.forEach((r) => {
+        w = Math.max(w, ctx.measureText(r[0]).width + ctx.measureText(r[1]).width);
+      });
+      const boxW = w + 34;
+      const boxH = rows.length * 15 + 10;
+      let bx = x + 14;
+      if (bx + boxW > L.price.x + L.price.w) bx = x - boxW - 14;
+      bx = Math.max(L.price.x + 2, bx);
+      const by = L.price.y + 6;
+      ctx.fillStyle = 'rgba(16,21,33,0.94)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+      this._roundRect(bx, by, boxW, boxH, 6);
+      ctx.fill();
+      ctx.stroke();
+      rows.forEach((r, idx) => {
+        const ry = by + 16 + idx * 15;
+        ctx.textAlign = 'left';
+        ctx.fillStyle = r[2] || (idx === 0 ? '#aeb8cc' : '#8a93a6');
+        ctx.font = idx === 0 ? 'bold 11px system-ui' : '11px system-ui';
+        ctx.fillText(r[0], bx + 9, ry);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = idx === 0 ? '#aeb8cc' : up && idx >= 1 ? '#dfe6f2' : '#dfe6f2';
+        if (r[2]) ctx.fillStyle = r[2];
+        ctx.fillText(r[1], bx + boxW - 9, ry);
+      });
+    }
+
+    // ---- events ------------------------------------------------------------
+    _setupEvents() {
+      const c = this.canvas;
+      let dragging = false;
+      let moved = false;
+      let lastX = 0;
+      let downStart = 0;
+
+      c.addEventListener('mousemove', (ev) => {
+        const r = c.getBoundingClientRect();
+        const px = ev.clientX - r.left;
+        const py = ev.clientY - r.top;
+        if (dragging) {
+          const dxPix = px - lastX;
+          const step = this._step(this._L ? this._L.price : { w: this.cssW });
+          const shift = Math.round(-dxPix / step);
+          if (shift !== 0) {
+            this.visStart = Math.max(
+              0,
+              Math.min(this.candles.length - this.visCount, this.visStart + shift)
+            );
+            lastX = px;
+            moved = true;
+          }
+        }
+        const idx = this._L ? this._iOf(px, this._L.price) : 0;
+        this.hover = { index: idx, x: px, y: py };
+        this._emit('hover', { index: idx, price: this._priceOf ? this._priceOf(py) : 0 });
+        this.requestRender();
+      });
+      c.addEventListener('mouseleave', () => {
+        this.hover = null;
+        dragging = false;
+        this.requestRender();
+      });
+      c.addEventListener('mousedown', (ev) => {
+        const r = c.getBoundingClientRect();
+        lastX = ev.clientX - r.left;
+        downStart = lastX;
+        dragging = !this.clickMode;
+        moved = false;
+        if (!this.clickMode) c.style.cursor = 'grabbing';
+      });
+      window.addEventListener('mouseup', (ev) => {
+        if (!dragging && !this.clickMode) return;
+        const wasDrag = moved;
+        dragging = false;
+        c.style.cursor = this.clickMode ? 'crosshair' : 'default';
+        if (!wasDrag) {
+          const r = c.getBoundingClientRect();
+          const px = ev.clientX - r.left;
+          const py = ev.clientY - r.top;
+          if (px >= 0 && px <= this.cssW && py >= 0 && py <= this.cssH && this._L) {
+            const idx = this._iOf(px, this._L.price);
+            const price = this._priceOf(py);
+            this._emit('click', { index: idx, price, x: px, y: py });
+          }
+        }
+      });
+      c.addEventListener(
+        'wheel',
+        (ev) => {
+          if (!this._L) return;
+          ev.preventDefault();
+          const r = c.getBoundingClientRect();
+          const px = ev.clientX - r.left;
+          const anchorI = this._iOf(px, this._L.price);
+          const factor = ev.deltaY > 0 ? 1.12 : 0.89;
+          let newCount = Math.round(this.visCount * factor);
+          newCount = Math.max(20, Math.min(this.candles.length, newCount));
+          const rel = (anchorI - this.visStart) / this.visCount;
+          this.visCount = newCount;
+          this.visStart = Math.round(anchorI - rel * newCount);
+          this.visStart = Math.max(0, Math.min(this.candles.length - this.visCount, this.visStart));
+          this.requestRender();
+        },
+        { passive: false }
+      );
+    }
+
+    _emit(evt, payload) {
+      (this.listeners[evt] || []).forEach((f) => f(payload));
+    }
+
+    _resize() {
+      const rect = this.container.getBoundingClientRect();
+      this.cssW = Math.max(320, rect.width);
+      this.cssH = Math.max(260, rect.height);
+      const dpr = window.devicePixelRatio || 1;
+      this.canvas.width = Math.round(this.cssW * dpr);
+      this.canvas.height = Math.round(this.cssH * dpr);
+      this.canvas.style.width = this.cssW + 'px';
+      this.canvas.style.height = this.cssH + 'px';
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.requestRender();
+    }
+
+    destroy() {
+      this._ro.disconnect();
+      this.canvas.remove();
+    }
+  }
+
+  window.StockChart = StockChart;
+})();
+
+</script>
+  <script>
+'use strict';
+
+/**
+ * lessons.js — the interactive curriculum.
+ *
+ * Each lesson is a sequence of steps. A step has:
+ *   title  — short heading
+ *   html   — the explanation shown in the side panel
+ *   setup(chart, data, util)   — (optional) configures the live chart so it
+ *                                illustrates the concept being taught
+ *   exercise                   — (optional) a quiz or click-on-chart task
+ *
+ * Crucially, setup() derives its annotations from the *real* candles that are
+ * loaded, so the lessons stay correct for whatever symbol the user picks.
+ *
+ * Exposed as window.LESSONS.
+ */
+(function () {
+  const C = {
+    ma20: '#46b3ff',
+    ma50: '#ffb020',
+    ma200: '#e36bf0',
+    sup: 'rgba(38,161,123,0.18)',
+    supLabel: 'rgba(120,230,190,0.95)',
+    res: 'rgba(224,86,106,0.18)',
+    resLabel: 'rgba(255,160,170,0.95)',
+    note: '#7aa2ff',
+    gold: '#ffd166',
+    warn: '#e0566a',
+    good: '#26a17b'
+  };
+
+  // ---- small helpers used by several lessons -------------------------------
+  const util = {
+    closes: (d) => d.candles.map((c) => c.close),
+    last: (d) => d.candles[d.candles.length - 1],
+    // pick a recent candle with a clear body AND visible wicks to dissect
+    illustrative(d) {
+      const cs = d.candles;
+      let best = cs.length - 1;
+      let bestScore = -1;
+      for (let i = Math.max(0, cs.length - 45); i < cs.length; i++) {
+        const c = cs[i];
+        const range = c.high - c.low;
+        if (range <= 0) continue;
+        const body = Math.abs(c.close - c.open) / range;
+        const upWick = (c.high - Math.max(c.open, c.close)) / range;
+        const loWick = (Math.min(c.open, c.close) - c.low) / range;
+        // want a moderate body and two visible wicks
+        const score = Math.min(upWick, loWick) * 2 + (body > 0.25 && body < 0.7 ? 1 : 0) + range;
+        if (score > bestScore) {
+          bestScore = score;
+          best = i;
+        }
+      }
+      return best;
+    },
+    recentGreen(d) {
+      const cs = d.candles;
+      for (let i = cs.length - 1; i >= Math.max(0, cs.length - 30); i--)
+        if (cs[i].close > cs[i].open) return i;
+      return cs.length - 1;
+    },
+    recentRed(d) {
+      const cs = d.candles;
+      for (let i = cs.length - 1; i >= Math.max(0, cs.length - 30); i--)
+        if (cs[i].close < cs[i].open) return i;
+      return cs.length - 2;
+    },
+    maxVolIndex(d, from, to) {
+      let idx = from;
+      let mv = -1;
+      for (let i = from; i <= to; i++)
+        if (d.candles[i].volume > mv) {
+          mv = d.candles[i].volume;
+          idx = i;
+        }
+      return idx;
+    }
+  };
+
+  // Reset the chart to a clean, sensible default before each step configures it.
+  function base(chart, data, opts = {}) {
+    chart.clearTeaching();
+    chart.setMode(opts.mode || 'candles');
+    chart.toggle('volume', opts.volume !== false);
+    chart.toggle('rsi', !!opts.rsi);
+    if (opts.focusLast) {
+      const n = data.candles.length;
+      chart.focusRange(Math.max(0, n - opts.focusLast), n - 1, 0.04);
+    } else {
+      chart.resetView();
+    }
+  }
+
+  const LESSONS = [
+    // ===================================================================== 1
+    {
+      id: 'basics',
+      icon: '🕯️',
+      title: 'Reading a Candlestick',
+      summary: 'What each candle tells you: open, high, low, close, body & wicks.',
+      steps: [
+        {
+          title: 'A chart is a story of prices',
+          html: `<p>Every chart is just a record of <b>what price did over time</b>. The
+            x-axis is time (each candle here is one day), the y-axis is price.</p>
+            <p>We use <b>candlesticks</b> because a single candle packs in four prices at
+            once. Hover anywhere on the chart to see them in the tooltip.</p>
+            <p>Let's zoom in and take one candle apart.</p>`,
+          setup(chart, data) {
+            base(chart, data, { focusLast: 60 });
+          }
+        },
+        {
+          title: 'Anatomy of one candle',
+          html: `<p>The highlighted candle has four prices:</p>
+            <ul>
+              <li><b>Open</b> — price at the start of the period</li>
+              <li><b>Close</b> — price at the end</li>
+              <li><b>High / Low</b> — the most extreme prices reached</li>
+            </ul>
+            <p>The thick part is the <b>body</b> (open→close). The thin lines are
+            <b>wicks</b> (a.k.a. shadows) — they reach up to the high and down to the low.</p>`,
+          setup(chart, data) {
+            base(chart, data, { focusLast: 14, volume: false });
+            const i = util.illustrative(data);
+            const c = data.candles[i];
+            chart.setAnnotations([
+              { index: i, price: c.high, text: 'Upper wick → the HIGH', color: C.note, dx: 54, dy: -28 },
+              { index: i, price: Math.max(c.open, c.close), text: c.close >= c.open ? 'Top of body = CLOSE' : 'Top of body = OPEN', color: C.good, dx: 60, dy: 6 },
+              { index: i, price: Math.min(c.open, c.close), text: c.close >= c.open ? 'Bottom of body = OPEN' : 'Bottom of body = CLOSE', color: C.warn, dx: -60, dy: 4 },
+              { index: i, price: c.low, text: 'Lower wick → the LOW', color: C.note, dx: -54, dy: 30 }
+            ]);
+            chart.setHighlights([{ from: i, to: i, color: 'rgba(255,255,255,0.06)' }]);
+          }
+        },
+        {
+          title: 'Green vs red',
+          html: `<p>Colour tells you direction at a glance:</p>
+            <ul>
+              <li><b style="color:#26a17b">Green / up</b> — close is <b>above</b> the open (price rose)</li>
+              <li><b style="color:#e0566a">Red / down</b> — close is <b>below</b> the open (price fell)</li>
+            </ul>
+            <p>A long body = strong, decisive move. A tiny body with long wicks =
+            indecision (buyers and sellers fought to a draw).</p>`,
+          setup(chart, data) {
+            base(chart, data, { focusLast: 40 });
+            const g = util.recentGreen(data);
+            const r = util.recentRed(data);
+            chart.setAnnotations([
+              { index: g, price: data.candles[g].high, text: 'Green: closed UP', color: C.good, dx: 30, dy: -26 },
+              { index: r, price: data.candles[r].low, text: 'Red: closed DOWN', color: C.warn, dx: -30, dy: 26 }
+            ]);
+          },
+          exercise: {
+            type: 'quiz',
+            prompt: 'A candle is green when…',
+            choices: [
+              'The close is higher than the open',
+              'The close is lower than the open',
+              'The high equals the low'
+            ],
+            answer: 0,
+            explain: 'Green means price finished the period above where it started (close > open).'
+          }
+        }
+      ]
+    },
+
+    // ===================================================================== 2
+    {
+      id: 'trends',
+      icon: '📈',
+      title: 'Trends & Structure',
+      summary: 'Up, down or sideways — and how swing highs/lows define a trend.',
+      steps: [
+        {
+          title: 'The trend is your friend',
+          html: `<p>Before any indicator, ask one question: <b>which way is price
+            generally moving?</b> There are only three answers:</p>
+            <ul>
+              <li><b style="color:#26a17b">Uptrend</b> — a staircase of <b>higher highs</b> and <b>higher lows</b></li>
+              <li><b style="color:#e0566a">Downtrend</b> — <b>lower highs</b> and <b>lower lows</b></li>
+              <li><b>Sideways / range</b> — bouncing between roughly flat levels</li>
+            </ul>
+            <p>The markers below pin the recent <b>swing highs (▼)</b> and
+            <b>swing lows (▲)</b> — the pivots that define structure.</p>`,
+          setup(chart, data) {
+            base(chart, data, { focusLast: 110 });
+            const { s, e } = { s: chart.visStart, e: chart.visStart + chart.visCount };
+            const piv = window.TA.pivots(data.candles, 4);
+            const markers = [];
+            piv.highs.filter((p) => p.i >= s && p.i < e).slice(-4).forEach((p) =>
+              markers.push({ index: p.i, side: 'above', color: C.warn, text: 'H' })
+            );
+            piv.lows.filter((p) => p.i >= s && p.i < e).slice(-4).forEach((p) =>
+              markers.push({ index: p.i, side: 'below', color: C.good, text: 'L' })
+            );
+            chart.setMarkers(markers);
+            const t = window.TA.trend(util.closes(data), 40);
+            const label =
+              t.dir === 'up' ? 'Recent structure: UPTREND ↗' :
+              t.dir === 'down' ? 'Recent structure: DOWNTREND ↘' :
+              'Recent structure: SIDEWAYS / RANGE →';
+            chart.setHighlights([{ from: chart.visStart, to: e - 1, color: 'rgba(122,162,255,0.05)', label }]);
+          }
+        },
+        {
+          title: 'Why structure matters',
+          html: `<p>Trends persist more often than they reverse, so traders try to
+            trade <i>with</i> the trend. The structure also tells you when a trend may
+            be <b>breaking</b>:</p>
+            <ul>
+              <li>An uptrend is intact while it keeps making higher lows.</li>
+              <li>The first <b>lower low</b> after a series of higher lows is an early
+              warning the uptrend may be ending.</li>
+            </ul>
+            <p>Read the swing markers left-to-right and check: are the ▲ lows climbing
+            or falling?</p>`,
+          setup(chart, data) {
+            base(chart, data, { focusLast: 110 });
+            const piv = window.TA.pivots(data.candles, 4);
+            const s = chart.visStart;
+            const e = s + chart.visCount;
+            const markers = [];
+            piv.highs.filter((p) => p.i >= s && p.i < e).forEach((p) =>
+              markers.push({ index: p.i, side: 'above', color: C.warn })
+            );
+            piv.lows.filter((p) => p.i >= s && p.i < e).forEach((p) =>
+              markers.push({ index: p.i, side: 'below', color: C.good })
+            );
+            chart.setMarkers(markers);
+          },
+          exercise: {
+            type: 'quiz',
+            prompt: 'A healthy uptrend is best described as…',
+            choices: [
+              'Lower highs and lower lows',
+              'Higher highs and higher lows',
+              'A flat line with no swings'
+            ],
+            answer: 1,
+            explain: 'Uptrends climb in a staircase: each push up makes a higher high, each dip a higher low.'
+          }
+        }
+      ]
+    },
+
+    // ===================================================================== 3
+    {
+      id: 'sr',
+      icon: '🧱',
+      title: 'Support & Resistance',
+      summary: 'The price “floors” and “ceilings” where moves tend to stall.',
+      steps: [
+        {
+          title: 'Floors and ceilings',
+          html: `<p><b>Support</b> is a price area where falling prices have tended to
+            <b>stop and bounce</b> — a floor where buyers step in.
+            <b>Resistance</b> is the opposite: a ceiling where rallies have stalled and
+            sellers took over.</p>
+            <p>The shaded bands below are levels detected from the real chart — places
+            price touched <b>more than once</b>. The more touches, the more significant.</p>`,
+          setup(chart, data) {
+            base(chart, data, { focusLast: 130 });
+            const levels = window.TA.supportResistance(data.candles, { lookback: 5, maxLevels: 5, minTouches: 2 });
+            levels.forEach((lvl, k) => {
+              const isSup = lvl.role === 'support';
+              chart.setZone('sr' + k, {
+                lo: lvl.lo,
+                hi: lvl.hi,
+                color: isSup ? C.sup : C.res,
+                label: `${isSup ? 'Support' : 'Resistance'} · ${lvl.touches} touches`,
+                labelColor: isSup ? C.supLabel : C.resLabel
+              });
+            });
+          }
+        },
+        {
+          title: 'Role reversal',
+          html: `<p>Here's the powerful part: once a level <b>breaks</b>, it often
+            flips role. Old <b>resistance</b> that price climbs above frequently becomes
+            new <b>support</b> on the way back down — and vice-versa.</p>
+            <p>This is why traders watch these zones closely: they're decision points
+            where a move either continues (breakout) or reverses (rejection).</p>
+            <p style="opacity:.8">Tip: think of them as <b>zones</b>, not exact prices.
+            Price is messy; a level is a neighbourhood, not a pixel.</p>`,
+          setup(chart, data) {
+            base(chart, data, { focusLast: 130 });
+            const levels = window.TA.supportResistance(data.candles, { lookback: 5, maxLevels: 4, minTouches: 2 });
+            levels.forEach((lvl, k) => {
+              const isSup = lvl.role === 'support';
+              chart.setZone('sr' + k, {
+                lo: lvl.lo, hi: lvl.hi,
+                color: isSup ? C.sup : C.res,
+                label: isSup ? 'Support' : 'Resistance',
+                labelColor: isSup ? C.supLabel : C.resLabel
+              });
+            });
+          }
+        },
+        {
+          title: 'Your turn',
+          html: `<p><b>Click on the chart</b> at a price where you think there's a
+            support or resistance level — somewhere price has reacted more than once.</p>
+            <p>I'll check it against the levels detected from the data.</p>`,
+          setup(chart, data) {
+            base(chart, data, { focusLast: 130 });
+          },
+          exercise: {
+            type: 'click',
+            prompt: 'Click a price level where the chart shows support or resistance.',
+            check(payload, data) {
+              const levels = window.TA.supportResistance(data.candles, { lookback: 5, maxLevels: 6, minTouches: 2 });
+              if (!levels.length) return { ok: true, message: 'Good eye — keep practising on other charts!' };
+              let best = null;
+              let bestDist = Infinity;
+              for (const lvl of levels) {
+                const d = Math.abs(payload.price - lvl.mid) / lvl.mid;
+                if (d < bestDist) {
+                  bestDist = d;
+                  best = lvl;
+                }
+              }
+              const within = bestDist <= 0.02; // within 2%
+              return {
+                ok: within,
+                level: best,
+                message: within
+                  ? `✅ Nice — that's right on a ${best.role} zone near ${best.mid.toFixed(2)} ` +
+                    `(${best.touches} touches).`
+                  : `Close! The nearest detected level is a ${best.role} zone around ` +
+                    `${best.mid.toFixed(2)}. Look for prices that were touched repeatedly.`
+              };
+            }
+          }
+        }
+      ]
+    },
+
+    // ===================================================================== 4
+    {
+      id: 'ma',
+      icon: '➰',
+      title: 'Moving Averages',
+      summary: 'Smoothing the noise — trend direction, crossovers & dynamic support.',
+      steps: [
+        {
+          title: 'Smoothing the noise',
+          html: `<p>A <b>moving average (MA)</b> plots the average closing price over the
+            last N periods, sliding forward each day. It strips out daily noise so the
+            underlying trend is obvious.</p>
+            <p>Below: <b style="color:#46b3ff">SMA&nbsp;20</b> (fast, ~1 month) and
+            <b style="color:#ffb020">SMA&nbsp;50</b> (slower, ~2.5 months).</p>
+            <ul>
+              <li>Price <b>above</b> a rising MA → bullish bias</li>
+              <li>Price <b>below</b> a falling MA → bearish bias</li>
+              <li>A <b>shorter</b> MA hugs price; a <b>longer</b> MA is smoother &amp; laggier</li>
+            </ul>`,
+          setup(chart, data) {
+            base(chart, data, { focusLast: 130 });
+            const closes = util.closes(data);
+            chart.setOverlay('ma20', { data: window.TA.sma(closes, 20), color: C.ma20, label: 'SMA 20', width: 1.8 });
+            chart.setOverlay('ma50', { data: window.TA.sma(closes, 50), color: C.ma50, label: 'SMA 50', width: 1.8 });
+          }
+        },
+        {
+          title: 'SMA vs EMA',
+          html: `<p>Two common flavours:</p>
+            <ul>
+              <li><b>SMA</b> (simple) weights every day equally.</li>
+              <li><b>EMA</b> (exponential) weights <b>recent</b> days more, so it turns
+              faster and reacts sooner to new moves.</li>
+            </ul>
+            <p>The dashed line is the <b style="color:#46b3ff">EMA&nbsp;20</b> over the
+            solid <b style="color:#ffb020">SMA&nbsp;20</b> — notice the EMA reacts a touch
+            quicker at turns. Neither is “better”; faster = more signals but more noise.</p>`,
+          setup(chart, data) {
+            base(chart, data, { focusLast: 110 });
+            const closes = util.closes(data);
+            chart.setOverlay('sma20', { data: window.TA.sma(closes, 20), color: C.ma50, label: 'SMA 20', width: 1.8 });
+            chart.setOverlay('ema20', { data: window.TA.ema(closes, 20), color: C.ma20, label: 'EMA 20', width: 1.8, dash: [5, 4] });
+          }
+        },
+        {
+          title: 'Crossovers: golden & death',
+          html: `<p>When a faster MA crosses a slower one, momentum may be shifting:</p>
+            <ul>
+              <li><b style="color:#26a17b">Golden cross</b> — fast crosses <b>above</b>
+              slow → bullish signal</li>
+              <li><b style="color:#e0566a">Death cross</b> — fast crosses <b>below</b>
+              slow → bearish signal</li>
+            </ul>
+            <p>The markers show where SMA&nbsp;20 crossed SMA&nbsp;50 on this chart. MAs
+            <b>lag</b> (they're built from past prices), so treat crossovers as
+            confirmation, not a crystal ball.</p>`,
+          setup(chart, data) {
+            base(chart, data, { focusLast: 150 });
+            const closes = util.closes(data);
+            const f = window.TA.sma(closes, 20);
+            const sl = window.TA.sma(closes, 50);
+            chart.setOverlay('ma20', { data: f, color: C.ma20, label: 'SMA 20', width: 1.8 });
+            chart.setOverlay('ma50', { data: sl, color: C.ma50, label: 'SMA 50', width: 1.8 });
+            const crosses = window.TA.crossovers(f, sl);
+            const s = chart.visStart;
+            const e = s + chart.visCount;
+            const markers = crosses
+              .filter((c) => c.i >= s && c.i < e)
+              .map((c) => ({
+                index: c.i,
+                side: c.type === 'golden' ? 'below' : 'above',
+                color: c.type === 'golden' ? C.good : C.warn,
+                text: c.type === 'golden' ? 'Golden' : 'Death'
+              }));
+            chart.setMarkers(markers);
+            const lastCross = crosses[crosses.length - 1];
+            if (lastCross) {
+              chart.setAnnotations([
+                {
+                  index: lastCross.i,
+                  price: data.candles[lastCross.i].close,
+                  text: (lastCross.type === 'golden' ? 'Most recent: golden cross' : 'Most recent: death cross'),
+                  color: lastCross.type === 'golden' ? C.good : C.warn,
+                  dx: -70,
+                  dy: lastCross.type === 'golden' ? 40 : -40
+                }
+              ]);
+            }
+          },
+          exercise: {
+            type: 'quiz',
+            prompt: 'A “golden cross” is generally read as…',
+            choices: [
+              'A bearish signal (fast MA crosses below slow MA)',
+              'A bullish signal (fast MA crosses above slow MA)',
+              'A guarantee the price will go up'
+            ],
+            answer: 1,
+            explain: 'Golden cross = faster MA crossing above the slower one, a bullish momentum signal (not a guarantee!).'
+          }
+        },
+        {
+          title: 'MAs as dynamic support/resistance',
+          html: `<p>In a strong trend, price often <b>pulls back to a moving average and
+            bounces</b> — the MA acts like support (in an uptrend) or resistance (in a
+            downtrend) that <i>moves with price</i>.</p>
+            <p>The 50- and 200-day MAs are the ones big institutions watch most, so they
+            can become self-fulfilling. Watch how price interacts with the
+            <b style="color:#ffb020">SMA&nbsp;50</b> below.</p>`,
+          setup(chart, data) {
+            base(chart, data, { focusLast: 150 });
+            const closes = util.closes(data);
+            chart.setOverlay('ma50', { data: window.TA.sma(closes, 50), color: C.ma50, label: 'SMA 50', width: 2 });
+            if (closes.length > 200)
+              chart.setOverlay('ma200', { data: window.TA.sma(closes, 200), color: C.ma200, label: 'SMA 200', width: 2 });
+          }
+        }
+      ]
+    },
+
+    // ===================================================================== 5
+    {
+      id: 'volume',
+      icon: '📊',
+      title: 'Volume',
+      summary: 'The fuel gauge — does conviction back the price move?',
+      steps: [
+        {
+          title: 'Volume = conviction',
+          html: `<p>The bars at the bottom are <b>volume</b>: how many shares traded each
+            period. Volume is the <b>fuel</b> behind a move.</p>
+            <ul>
+              <li>A breakout on <b>high</b> volume is more trustworthy — lots of
+              participants agree.</li>
+              <li>A move on <b>low</b> volume can be a head-fake that fizzles.</li>
+              <li><b>Volume spikes</b> often mark climaxes, news, or turning points.</li>
+            </ul>
+            <p>The highlighted bar is the biggest volume day in view.</p>`,
+          setup(chart, data) {
+            base(chart, data, { focusLast: 110, volume: true });
+            const s = chart.visStart;
+            const e = s + chart.visCount - 1;
+            const vi = util.maxVolIndex(data, s, e);
+            chart.setHighlights([{ from: vi, to: vi, color: 'rgba(255,209,102,0.12)' }]);
+            chart.setAnnotations([
+              { index: vi, price: data.candles[vi].high, text: 'Volume spike →\nconviction behind the move', color: C.gold, dx: 40, dy: -34 }
+            ]);
+          },
+          exercise: {
+            type: 'quiz',
+            prompt: 'A breakout above resistance is more convincing when it happens on…',
+            choices: ['Low volume', 'High volume', 'No volume'],
+            answer: 1,
+            explain: 'High volume means many participants back the move, making the breakout more reliable.'
+          }
+        }
+      ]
+    },
+
+    // ===================================================================== 6
+    {
+      id: 'rsi',
+      icon: '⚡',
+      title: 'Momentum (RSI)',
+      summary: 'Is the move overstretched? Reading the Relative Strength Index.',
+      steps: [
+        {
+          title: 'Overbought & oversold',
+          html: `<p>The <b>RSI</b> (Relative Strength Index) panel below oscillates
+            between 0 and 100 and measures momentum:</p>
+            <ul>
+              <li>Above <b>70</b> → <b style="color:#e0566a">overbought</b> (move may be
+              overstretched, due a pause/pullback)</li>
+              <li>Below <b>30</b> → <b style="color:#26a17b">oversold</b> (selling may be
+              exhausted, due a bounce)</li>
+              <li>Around <b>50</b> → neutral momentum</li>
+            </ul>
+            <p>Important: in a <b>strong trend</b>, RSI can stay overbought/oversold for a
+            long time. “Overbought” is not an automatic “sell”.</p>`,
+          setup(chart, data) {
+            base(chart, data, { focusLast: 130, rsi: true });
+            const rsi = window.TA.rsi(util.closes(data), 14);
+            const s = chart.visStart;
+            const e = s + chart.visCount;
+            let ob = -1;
+            let os = -1;
+            for (let i = e - 1; i >= s; i--) {
+              if (ob < 0 && rsi[i] != null && rsi[i] > 70) ob = i;
+              if (os < 0 && rsi[i] != null && rsi[i] < 30) os = i;
+            }
+            const ann = [];
+            if (ob >= 0) ann.push({ index: ob, price: data.candles[ob].high, text: 'RSI > 70 here:\noverbought', color: C.warn, dx: -60, dy: -28 });
+            if (os >= 0) ann.push({ index: os, price: data.candles[os].low, text: 'RSI < 30 here:\noversold', color: C.good, dx: 50, dy: 28 });
+            chart.setAnnotations(ann);
+          }
+        },
+        {
+          title: 'Divergence (bonus)',
+          html: `<p>A subtle, powerful signal: <b>divergence</b>. When price makes a
+            <b>higher high</b> but RSI makes a <b>lower high</b>, momentum is fading even
+            though price rose — a possible reversal warning (and vice-versa at bottoms).</p>
+            <p>Compare the slope of the price swings with the slope of the RSI peaks
+            below. They should usually agree; when they disagree, pay attention.</p>`,
+          setup(chart, data) {
+            base(chart, data, { focusLast: 130, rsi: true });
+          },
+          exercise: {
+            type: 'quiz',
+            prompt: 'An RSI reading of 78 suggests the asset is…',
+            choices: ['Oversold', 'Neutral', 'Overbought'],
+            answer: 2,
+            explain: 'Above 70 is the overbought zone — momentum is stretched, though strong trends can stay there a while.'
+          }
+        }
+      ]
+    },
+
+    // ===================================================================== 7
+    {
+      id: 'together',
+      icon: '🎯',
+      title: 'Putting It Together',
+      summary: 'Combine the tools, then test yourself on the live chart.',
+      steps: [
+        {
+          title: 'Confluence beats any single signal',
+          html: `<p>No indicator works alone. Skilled chart reading is about
+            <b>confluence</b> — several clues pointing the same way:</p>
+            <ul>
+              <li>Trend direction (structure + MAs)</li>
+              <li>Price reacting at a <b>support/resistance</b> zone</li>
+              <li><b>Volume</b> confirming the move</li>
+              <li><b>RSI</b> not screaming overbought/oversold against you</li>
+            </ul>
+            <p>The chart now shows everything together. Take a moment to read it
+            top-down: trend → level → trigger.</p>`,
+          setup(chart, data) {
+            base(chart, data, { focusLast: 150, volume: true, rsi: true });
+            const closes = util.closes(data);
+            chart.setOverlay('ma20', { data: window.TA.sma(closes, 20), color: C.ma20, label: 'SMA 20' });
+            chart.setOverlay('ma50', { data: window.TA.sma(closes, 50), color: C.ma50, label: 'SMA 50' });
+            const levels = window.TA.supportResistance(data.candles, { lookback: 5, maxLevels: 3, minTouches: 2 });
+            levels.forEach((lvl, k) => {
+              const isSup = lvl.role === 'support';
+              chart.setZone('sr' + k, { lo: lvl.lo, hi: lvl.hi, color: isSup ? C.sup : C.res, label: isSup ? 'Support' : 'Resistance', labelColor: isSup ? C.supLabel : C.resLabel });
+            });
+          }
+        },
+        {
+          title: 'Final check',
+          html: `<p>Use the live chart on the left to answer. Switch symbols any time
+            with the box at the top — every lesson re-derives itself from real data, so
+            keep exploring after you finish!</p>`,
+          setup(chart, data) {
+            base(chart, data, { focusLast: 150, volume: true, rsi: true });
+            const closes = util.closes(data);
+            chart.setOverlay('ma50', { data: window.TA.sma(closes, 50), color: C.ma50, label: 'SMA 50' });
+          },
+          exercise: {
+            type: 'quiz',
+            prompt: 'You see a breakout above a well-tested resistance zone on heavy volume, price above a rising 50-day MA. This is generally…',
+            choices: [
+              'A bearish setup — expect a fall',
+              'A bullish confluence — trend, level and volume agree',
+              'Meaningless without RSI at exactly 50'
+            ],
+            answer: 1,
+            explain: 'Trend up + resistance broken + volume confirming = bullish confluence. No setup is certain, but the clues align.'
+          }
+        }
+      ]
+    }
+  ];
+
+  window.LESSONS = LESSONS;
+})();
+
+</script>
+  <script>
+'use strict';
+
+/**
+ * app.js — wires the chart, the data layer and the lesson curriculum into the
+ * interactive tutor UI: symbol loading, lesson/step navigation, quizzes,
+ * click-on-chart exercises and a free "Explore" sandbox.
+ */
+(function () {
+  const LS_KEY = 'chartSchool.v1';
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const el = (tag, cls, html) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (html != null) n.innerHTML = html;
+    return n;
+  };
+
+  const state = {
+    data: null,
+    symbol: 'AAPL',
+    range: '1y',
+    interval: '1d',
+    lessonIdx: 0,
+    stepIdx: 0,
+    view: 'lessons',
+    explore: { mode: 'candles', ma20: false, ma50: false, ma200: false, ema20: false, volume: true, rsi: false, sr: false }
+  };
+
+  let chart;
+  const C = { ma20: '#46b3ff', ma50: '#ffb020', ma200: '#e36bf0', ema: '#5be0c0' };
+
+  // ---- persistence ---------------------------------------------------------
+  function save() {
+    try {
+      localStorage.setItem(
+        LS_KEY,
+        JSON.stringify({ symbol: state.symbol, lessonIdx: state.lessonIdx, stepIdx: state.stepIdx, view: state.view })
+      );
+    } catch (_) {}
+  }
+  function restore() {
+    try {
+      const s = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+      if (s.symbol) state.symbol = s.symbol;
+      if (Number.isInteger(s.lessonIdx)) state.lessonIdx = s.lessonIdx;
+      if (Number.isInteger(s.stepIdx)) state.stepIdx = s.stepIdx;
+      if (s.view) state.view = s.view;
+    } catch (_) {}
+  }
+
+  // ---- data ----------------------------------------------------------------
+  async function loadSymbol(sym) {
+    state.symbol = (sym || state.symbol).toUpperCase().trim();
+    $('#symbolInput').value = state.symbol;
+    setStatus('Loading ' + state.symbol + '…', 'muted');
+    const data = await window.MarketData.load(state.symbol, state.range, state.interval);
+    state.data = data;
+    chart.setData(data);
+    renderHeader();
+    if (state.view === 'lessons') renderStep();
+    else applyExplore();
+    save();
+  }
+
+  function renderHeader() {
+    const d = state.data;
+    if (!d) return;
+    const last = d.candles[d.candles.length - 1];
+    const prev = d.candles[d.candles.length - 2] || last;
+    const chg = last.close - prev.close;
+    const pct = (chg / prev.close) * 100;
+    const up = chg >= 0;
+    $('#hdrSymbol').textContent = d.symbol;
+    $('#hdrName').textContent = d.name || d.exchange || '';
+    $('#hdrPrice').textContent = last.close.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const chgEl = $('#hdrChange');
+    chgEl.textContent = `${up ? '▲' : '▼'} ${Math.abs(chg).toFixed(2)} (${up ? '+' : ''}${pct.toFixed(2)}%)`;
+    chgEl.className = 'hdr-change ' + (up ? 'pos' : 'neg');
+
+    let label = `Source: ${d.source}`;
+    let tone = d.synthetic ? 'warn' : 'good';
+    if (d.note) label += ' · ' + d.note;
+    setStatus(label, tone);
+  }
+
+  function setStatus(text, tone) {
+    const s = $('#dataStatus');
+    s.textContent = text;
+    s.className = 'data-status ' + (tone || 'muted');
+  }
+
+  // ---- lesson navigation ---------------------------------------------------
+  function flatSteps() {
+    const out = [];
+    window.LESSONS.forEach((lesson, li) =>
+      lesson.steps.forEach((step, si) => out.push({ li, si, lesson, step }))
+    );
+    return out;
+  }
+  function globalIndex() {
+    let g = 0;
+    for (let li = 0; li < state.lessonIdx; li++) g += window.LESSONS[li].steps.length;
+    return g + state.stepIdx;
+  }
+
+  function renderLessonList() {
+    const list = $('#lessonList');
+    list.innerHTML = '';
+    window.LESSONS.forEach((lesson, li) => {
+      const item = el('button', 'lesson-item' + (li === state.lessonIdx ? ' active' : ''));
+      item.innerHTML = `<span class="li-icon">${lesson.icon}</span>
+        <span class="li-text"><span class="li-title">${lesson.title}</span>
+        <span class="li-sum">${lesson.summary}</span></span>`;
+      item.addEventListener('click', () => {
+        state.view = 'lessons';
+        syncTabs();
+        state.lessonIdx = li;
+        state.stepIdx = 0;
+        renderStep();
+        save();
+      });
+      list.appendChild(item);
+    });
+  }
+
+  function renderStep() {
+    if (state.view !== 'lessons') return;
+    const lesson = window.LESSONS[state.lessonIdx];
+    const step = lesson.steps[state.stepIdx];
+    renderLessonList();
+
+    $('#stepLessonTitle').innerHTML = `${lesson.icon} ${lesson.title}`;
+    $('#stepTitle').textContent = step.title;
+    $('#stepBody').innerHTML = step.html;
+
+    // configure the live chart for this step
+    if (state.data && step.setup) {
+      try {
+        chart.enableClickToMark(false);
+        step.setup(chart, state.data, {});
+      } catch (e) {
+        console.error('step setup failed', e);
+      }
+    }
+
+    renderExercise(step);
+
+    // progress + nav
+    const steps = flatSteps();
+    const g = globalIndex();
+    $('#progressFill').style.width = ((g + 1) / steps.length) * 100 + '%';
+    $('#progressText').textContent = `Step ${g + 1} of ${steps.length}`;
+    $('#stepCount').textContent = `${state.stepIdx + 1}/${lesson.steps.length}`;
+    $('#prevBtn').disabled = g === 0;
+    $('#nextBtn').textContent = g === steps.length - 1 ? 'Finish ✓' : 'Next →';
+    save();
+  }
+
+  function renderExercise(step) {
+    const box = $('#exerciseBox');
+    box.innerHTML = '';
+    chart.enableClickToMark(false);
+    // drop any click handler left over from a previous exercise step
+    if (state._clickHandler) {
+      chart.off('click', state._clickHandler);
+      state._clickHandler = null;
+    }
+    if (!step.exercise) {
+      box.style.display = 'none';
+      return;
+    }
+    box.style.display = 'block';
+    const ex = step.exercise;
+
+    if (ex.type === 'quiz') {
+      box.appendChild(el('div', 'ex-tag', '✦ Quick check'));
+      box.appendChild(el('div', 'ex-prompt', ex.prompt));
+      const choices = el('div', 'ex-choices');
+      let done = false;
+      ex.choices.forEach((choice, i) => {
+        const b = el('button', 'ex-choice', choice);
+        b.addEventListener('click', () => {
+          if (done) return;
+          done = true;
+          const correct = i === ex.answer;
+          Array.from(choices.children).forEach((c, ci) => {
+            c.classList.add('locked');
+            if (ci === ex.answer) c.classList.add('correct');
+            if (ci === i && !correct) c.classList.add('wrong');
+          });
+          const fb = el('div', 'ex-feedback ' + (correct ? 'ok' : 'no'),
+            (correct ? '✅ Correct. ' : '❌ Not quite. ') + ex.explain);
+          box.appendChild(fb);
+        });
+        choices.appendChild(b);
+      });
+      box.appendChild(choices);
+    }
+
+    if (ex.type === 'click') {
+      box.appendChild(el('div', 'ex-tag', '✦ Your turn'));
+      box.appendChild(el('div', 'ex-prompt', ex.prompt));
+      const fb = el('div', 'ex-feedback muted', 'Click anywhere on the chart…');
+      box.appendChild(fb);
+      chart.enableClickToMark(true);
+      const handler = (payload) => {
+        const res = ex.check(payload, state.data);
+        fb.className = 'ex-feedback ' + (res.ok ? 'ok' : 'no');
+        fb.textContent = res.message;
+        // draw what they clicked + the nearest real level
+        chart.setHLine('userMark', { price: payload.price, color: res.ok ? '#26a17b' : '#7aa2ff', label: 'you', dash: [4, 3] });
+        if (res.level)
+          chart.setZone('answerZone', {
+            lo: res.level.lo, hi: res.level.hi,
+            color: res.level.role === 'support' ? 'rgba(38,161,123,0.22)' : 'rgba(224,86,106,0.22)',
+            label: res.level.role, labelColor: '#fff'
+          });
+      };
+      state._clickHandler = handler;
+      chart.on('click', handler);
+    }
+  }
+
+  function go(delta) {
+    const steps = flatSteps();
+    let g = globalIndex() + delta;
+    g = Math.max(0, Math.min(steps.length - 1, g));
+    const target = steps[g];
+    state.lessonIdx = target.li;
+    state.stepIdx = target.si;
+    renderStep();
+  }
+
+  // ---- explore sandbox -----------------------------------------------------
+  function applyExplore() {
+    if (!state.data) return;
+    chart.clearTeaching();
+    chart.setMode(state.explore.mode);
+    chart.toggle('volume', state.explore.volume);
+    chart.toggle('rsi', state.explore.rsi);
+    chart.resetView();
+    const closes = state.data.candles.map((c) => c.close);
+    if (state.explore.ma20) chart.setOverlay('ma20', { data: window.TA.sma(closes, 20), color: C.ma20, label: 'SMA 20' });
+    if (state.explore.ma50) chart.setOverlay('ma50', { data: window.TA.sma(closes, 50), color: C.ma50, label: 'SMA 50' });
+    if (state.explore.ma200 && closes.length > 200) chart.setOverlay('ma200', { data: window.TA.sma(closes, 200), color: C.ma200, label: 'SMA 200' });
+    if (state.explore.ema20) chart.setOverlay('ema20', { data: window.TA.ema(closes, 20), color: C.ema, label: 'EMA 20', dash: [5, 4] });
+    if (state.explore.sr) {
+      const levels = window.TA.supportResistance(state.data.candles, { lookback: 5, maxLevels: 6, minTouches: 2 });
+      levels.forEach((lvl, k) => {
+        const isSup = lvl.role === 'support';
+        chart.setZone('sr' + k, {
+          lo: lvl.lo, hi: lvl.hi,
+          color: isSup ? 'rgba(38,161,123,0.16)' : 'rgba(224,86,106,0.16)',
+          label: `${isSup ? 'Support' : 'Resistance'} · ${lvl.touches}×`,
+          labelColor: isSup ? 'rgba(120,230,190,.95)' : 'rgba(255,160,170,.95)'
+        });
+      });
+    }
+  }
+
+  function syncTabs() {
+    $('#tabLessons').classList.toggle('active', state.view === 'lessons');
+    $('#tabExplore').classList.toggle('active', state.view === 'explore');
+    $('#lessonsView').style.display = state.view === 'lessons' ? 'flex' : 'none';
+    $('#exploreView').style.display = state.view === 'explore' ? 'block' : 'none';
+  }
+
+  // ---- wiring --------------------------------------------------------------
+  function bindUI() {
+    $('#loadBtn').addEventListener('click', () => loadSymbol($('#symbolInput').value));
+    $('#symbolInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') loadSymbol($('#symbolInput').value);
+    });
+    document.querySelectorAll('.chip[data-sym]').forEach((c) =>
+      c.addEventListener('click', () => loadSymbol(c.dataset.sym))
+    );
+    $('#rangeSelect').addEventListener('change', (e) => {
+      const v = e.target.value;
+      const map = {
+        '6mo': ['6mo', '1d'], '1y': ['1y', '1d'], '2y': ['2y', '1d'],
+        '5y': ['5y', '1wk'], '5d': ['5d', '15m']
+      };
+      [state.range, state.interval] = map[v] || ['1y', '1d'];
+      loadSymbol(state.symbol);
+    });
+
+    $('#tabLessons').addEventListener('click', () => {
+      state.view = 'lessons';
+      syncTabs();
+      renderStep();
+      save();
+    });
+    $('#tabExplore').addEventListener('click', () => {
+      state.view = 'explore';
+      syncTabs();
+      applyExplore();
+      save();
+    });
+
+    $('#prevBtn').addEventListener('click', () => go(-1));
+    $('#nextBtn').addEventListener('click', () => go(1));
+
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (state.view !== 'lessons') return;
+      if (e.key === 'ArrowRight') go(1);
+      if (e.key === 'ArrowLeft') go(-1);
+    });
+
+    // explore toggles
+    document.querySelectorAll('[data-toggle]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const key = input.dataset.toggle;
+        if (key === 'mode') state.explore.mode = input.checked ? 'line' : 'candles';
+        else state.explore[key] = input.checked;
+        applyExplore();
+      });
+    });
+
+    $('#resetViewBtn').addEventListener('click', () => chart.resetView());
+  }
+
+  // ---- boot ----------------------------------------------------------------
+  async function boot() {
+    restore();
+    chart = new window.StockChart($('#chart'), { initialBars: 130 });
+    bindUI();
+    renderLessonList();
+    syncTabs();
+    await loadSymbol(state.symbol);
+    if (state.view === 'lessons') renderStep();
+    else applyExplore();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+
+</script>
+</body>
+</html>
