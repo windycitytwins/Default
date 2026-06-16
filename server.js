@@ -43,6 +43,18 @@ const INTERVALS = new Set(['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h', '
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// --- tiny in-memory cache (so repeated views don't re-hit providers) --------
+const cache = new Map(); // key -> { data, exp }
+function cacheGet(k) {
+  const e = cache.get(k);
+  if (e && e.exp > Date.now()) return e.data;
+  if (e) cache.delete(k);
+  return null;
+}
+function cacheSet(k, data, ttl) {
+  cache.set(k, { data, exp: Date.now() + ttl });
+}
+
 // --- low-level GET -> {status, body, headers} --------------------------------
 function httpGet(url, { headers = {}, timeoutMs = 10000, redirects = 4 } = {}) {
   return new Promise((resolve, reject) => {
@@ -147,7 +159,7 @@ async function fromYahoo(symbol, range, interval) {
     }
     return res.body;
   };
-  const raw = await withRetry(run, { attempts: 5, base: 500 });
+  const raw = await withRetry(run, { attempts: 3, base: 700 }); // gentle: avoid self-throttling
   const json = JSON.parse(raw);
   const e = json && json.chart && json.chart.error;
   if (e) throw tagErr(`Yahoo: ${e.code || e.description}`, 200, e.description);
@@ -208,6 +220,43 @@ async function fromStooq(symbol) {
   throw tagErr('Stooq: no usable CSV (rate-limited or unknown symbol)', lastStatus, lastBody);
 }
 
+// --- Nasdaq official API (keyless daily history) -----------------------------
+async function fromNasdaq(symbol, range) {
+  const years = range === 'max' ? 25 : range === '10y' ? 10 : range === '5y' ? 5 : range === '2y' ? 2 : 1;
+  const to = new Date();
+  const from = new Date();
+  from.setFullYear(from.getFullYear() - years);
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  const url =
+    `https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/historical` +
+    `?assetclass=stocks&fromdate=${fmt(from)}&todate=${fmt(to)}&limit=99999`;
+  const headers = {
+    Accept: 'application/json, text/plain, */*',
+    Origin: 'https://www.nasdaq.com',
+    Referer: 'https://www.nasdaq.com/',
+    'Accept-Language': 'en-US,en;q=0.9'
+  };
+  const res = await withRetry(() => httpGet(url, { headers, timeoutMs: 11000 }), { attempts: 2 });
+  if (res.status !== 200) throw tagErr(`Nasdaq HTTP ${res.status}`, res.status, res.body);
+  const json = JSON.parse(res.body);
+  const rows = json && json.data && json.data.tradesTable && json.data.tradesTable.rows;
+  if (!rows || !rows.length) throw tagErr('Nasdaq: no rows (unknown symbol?)', 200, res.body);
+  const num = (s) => +String(s).replace(/[$,]/g, '');
+  const candles = rows
+    .map((r) => ({
+      time: new Date(r.date).getTime(),
+      open: num(r.open), high: num(r.high), low: num(r.low), close: num(r.close),
+      adjclose: num(r.close), volume: r.volume ? num(r.volume) : 0
+    }))
+    .filter((c) => isFinite(c.close) && isFinite(c.time))
+    .sort((a, b) => a.time - b.time);
+  if (candles.length < 2) throw tagErr('Nasdaq: too few candles', 200, res.body);
+  return {
+    symbol: symbol.toUpperCase(), currency: 'USD', exchange: 'NASDAQ', interval: '1d',
+    range, source: 'Nasdaq', name: '', fetchedAt: Date.now(), candles
+  };
+}
+
 // --- Twelve Data (optional, needs free TWELVEDATA_KEY) -----------------------
 const TD_INTERVAL = { '1m': '1min', '2m': '5min', '5m': '5min', '15m': '15min', '30m': '30min', '60m': '1h', '90m': '1h', '1h': '1h', '1d': '1day', '5d': '1day', '1wk': '1week', '1mo': '1month', '3mo': '1month' };
 async function fromTwelveData(symbol, interval) {
@@ -231,18 +280,28 @@ async function fromTwelveData(symbol, interval) {
 
 // --- unified loader + diagnostics --------------------------------------------
 function providersFor(interval) {
+  const daily = ['1d', '1wk', '1mo', '3mo'].includes(interval);
   const list = [];
   if (TWELVEDATA_KEY) list.push(['Twelve Data', (s, r, i) => fromTwelveData(s, i)]);
   list.push(['Yahoo Finance', (s, r, i) => fromYahoo(s, r, i)]);
-  if (['1d', '1wk', '1mo', '3mo'].includes(interval)) list.push(['Stooq', (s) => fromStooq(s)]);
+  // Nasdaq & Stooq are daily-only, but they're great keyless backups when Yahoo throttles.
+  if (daily) {
+    list.push(['Nasdaq', (s, r) => fromNasdaq(s, r)]);
+    list.push(['Stooq', (s) => fromStooq(s)]);
+  }
   return list;
 }
 async function loadChart(symbol, range, interval) {
+  const key = `${symbol}|${range}|${interval}`;
+  const hit = cacheGet(key);
+  if (hit) return { data: hit, errors: [], cached: true };
   const errors = [];
   for (const [name, fn] of providersFor(interval)) {
     try {
       const data = await fn(symbol, range, interval);
-      if (errors.length) data.note = 'Primary source unavailable; served by ' + data.source + '.';
+      if (errors.length) data.note = 'Primary source busy; served by ' + data.source + '.';
+      // short TTL for intraday so it stays live; longer for daily to be gentle
+      cacheSet(key, data, /[mh]/.test(interval) ? 10000 : 120000);
       return { data, errors };
     } catch (e) {
       errors.push({ provider: name, status: e.status || 0, error: e.message, snippet: e.snippet || '' });
@@ -254,7 +313,11 @@ async function loadChart(symbol, range, interval) {
 }
 async function diagnose(symbol) {
   const out = [];
-  const all = [['Yahoo Finance', () => fromYahoo(symbol, '1mo', '1d')], ['Stooq', () => fromStooq(symbol)]];
+  const all = [
+    ['Yahoo Finance', () => fromYahoo(symbol, '1mo', '1d')],
+    ['Nasdaq', () => fromNasdaq(symbol, '1y')],
+    ['Stooq', () => fromStooq(symbol)]
+  ];
   if (TWELVEDATA_KEY) all.unshift(['Twelve Data', () => fromTwelveData(symbol, '1d')]);
   for (const [name, fn] of all) {
     const t0 = Date.now();
@@ -355,10 +418,10 @@ if (require.main === module) {
     /* eslint-disable no-console */
     console.log(`\n  📈  Chart School is running`);
     console.log(`      →  http://localhost:${PORT}\n`);
-    console.log(`  Real data: ${TWELVEDATA_KEY ? 'Twelve Data → ' : ''}Yahoo Finance → Stooq. No fabricated data.`);
+    console.log(`  Real data: ${TWELVEDATA_KEY ? 'Twelve Data → ' : ''}Yahoo Finance → Nasdaq → Stooq (keyless). No fabricated data.`);
     console.log(`  Verify accuracy:  node verify-data.js AAPL\n`);
     console.log(`  Press Ctrl+C to stop.\n`);
   });
 }
 
-module.exports = { fromYahoo, fromStooq, fromTwelveData, searchSymbols, loadChart, diagnose, applyAdjustment, getYahooAuth };
+module.exports = { fromYahoo, fromStooq, fromNasdaq, fromTwelveData, searchSymbols, loadChart, diagnose, applyAdjustment, getYahooAuth };

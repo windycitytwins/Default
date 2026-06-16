@@ -47,17 +47,13 @@ function printDiagnostics(report) {
     }
   }
   console.log('');
-  const yahoo429 = report.attempts.find((a) => a.provider.includes('Yahoo') && /429/.test(String(a.status)));
-  if (yahoo429) {
-    console.log('  Yahoo is rate-limiting this IP (HTTP 429). Options:');
-    console.log('    • Wait a few minutes and try again (limits are temporary), or');
-    console.log('    • Use the free, reliable Twelve Data backup (1-minute signup, no cost):');
-    console.log('        1. Get a key at https://twelvedata.com/pricing  (Basic = free)');
-    console.log('        2. Restart with:  TWELVEDATA_KEY=your_key node server.js');
-    console.log('        3. Re-verify:     TWELVEDATA_KEY=your_key node verify-data.js ' + symbol);
-  } else if (!report.twelveDataKey) {
-    console.log('  Tip: a free Twelve Data key makes this bulletproof —');
-    console.log('       https://twelvedata.com/pricing  then  TWELVEDATA_KEY=key node server.js');
+  console.log('  All free keyless sources are throttling your IP at this moment.');
+  console.log('  These blocks are temporary and provider-side. Options:');
+  console.log('    • Wait ~10–30 min and retry — the app rotates across Yahoo, Nasdaq');
+  console.log('      and Stooq, so a total outage like this is uncommon.');
+  if (!report.twelveDataKey) {
+    console.log('    • (Optional, still free) a Twelve Data key removes the wait entirely:');
+    console.log('        https://twelvedata.com/pricing → TWELVEDATA_KEY=key node server.js');
   }
   console.log('');
 }

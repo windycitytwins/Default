@@ -168,6 +168,8 @@
   async function refreshLive() {
     // never poll over sample data or while an error is shown
     if (refreshing || document.hidden || !state.data || state.data.synthetic) return;
+    // only intraday views tick meaningfully — don't hammer providers for daily+
+    if (!/(m|h)$/.test(state.interval)) return;
     refreshing = true;
     const sym = state.symbol;
     try {
@@ -444,8 +446,9 @@
     if (state.view === 'lessons') renderStep();
     else applyExplore();
 
-    // live auto-refresh: poll every ~12s, and immediately when the tab regains focus
-    setInterval(refreshLive, 12000);
+    // live auto-refresh: poll every ~20s (gentle on free sources; server also
+    // caches), and immediately when the tab regains focus
+    setInterval(refreshLive, 20000);
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) refreshLive();
     });

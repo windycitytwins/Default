@@ -62,24 +62,28 @@ node verify-data.js AAPL          # daily; also: node verify-data.js TSLA 5d 15m
 
 ## Reliability & accuracy
 
-- Data comes from **Yahoo Finance** (a full cookie + crumb handshake, retries
-  and host rotation), with **Stooq** as a keyless daily backstop. Numbers match
-  finance.yahoo.com.
+- **Keyless by default — no token, no signup.** Data is pulled from several free
+  sources in rotation and the app uses whichever is responding:
+  **Yahoo Finance** (full cookie + crumb handshake) → **Nasdaq** (official API) →
+  **Stooq**. Numbers match finance.yahoo.com.
+- **Server-side caching + gentle request rates** keep us under the providers'
+  anti-scraping throttles, so you rarely get rate-limited in the first place.
 - **It never fabricates data.** If every real source fails you get a clear error
   with the reason; "sample data" only appears if you explicitly choose it.
-- **If Yahoo rate-limits you (HTTP 429)** — its free endpoint occasionally does —
-  either wait a few minutes, or add a **free, no-cost** Twelve Data key for a
-  rock-solid backup:
-  1. Get a key (Basic plan = free): https://twelvedata.com/pricing
-  2. Start with it:
-     ```bash
-     TWELVEDATA_KEY=your_key node server.js
-     ```
-  When set, Twelve Data is used first and the app becomes essentially
-  bulletproof. Still 100% free and local.
+- **Inherent caveat (honest):** no *free + keyless + unlimited + 100%-reliable*
+  feed exists. With several sources in rotation, a total block is uncommon — but
+  if every source throttles your IP at once, wait ~10–30 min (the blocks are
+  temporary). There is **no hard daily cap**.
+- **Optional, still-free** bulletproofing if you ever want zero waiting: a free
+  Twelve Data key (https://twelvedata.com/pricing) used first when present:
+  ```bash
+  TWELVEDATA_KEY=your_key node server.js
+  ```
 - Diagnose any time: `node verify-data.js SYMBOL` prints a per-provider report
-  (HTTP status + response) so failures are never a mystery. There's also a
-  `GET /api/diagnose?symbol=AAPL` endpoint.
+  (HTTP status + response). Also `GET /api/diagnose?symbol=AAPL`.
+
+> Note: intraday (1-/2-/15-min) data is served by Yahoo; Nasdaq & Stooq cover
+> daily/weekly/monthly. So daily & historical have the most keyless redundancy.
 
 ### Using it
 
