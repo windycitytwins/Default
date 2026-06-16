@@ -87,6 +87,7 @@
       <div class="tabs">
         <button id="tabLessons" class="tab active">📚 Lessons</button>
         <button id="tabExplore" class="tab">🔬 Explore</button>
+        <button id="tabSignals" class="tab">🧭 Signals</button>
       </div>
 
       <!-- LESSONS -->
@@ -160,6 +161,18 @@
           <p class="disclaimer">Educational tool only — not financial advice.</p>
         </div>
       </div>
+
+      <!-- SIGNALS -->
+      <div id="signalsView" class="tutor-view" style="display:none">
+        <p class="explore-intro">An educational technical read of <b id="sigSymbol">—</b> across
+          three timeframes — long-term, multi-month and intraday. It scores what a chart-reader
+          weighs and explains every signal. <b>Not financial advice.</b></p>
+        <button id="analyzeBtn" class="btn-primary wide">Analyze <span id="analyzeSym">AAPL</span></button>
+        <div id="signalsResult" class="signals-result"></div>
+        <p class="disclaimer">Educational only. Technical signals describe probabilities, not
+          certainties, and are just one input a real investor weighs alongside fundamentals,
+          valuation, the company's business, and risk management. Not financial advice.</p>
+      </div>
     </aside>
   </main>
 
@@ -167,6 +180,7 @@
   <script src="js/data.js"></script>
   <script src="js/chart.js"></script>
   <script src="js/lessons.js"></script>
+  <script src="js/analysis.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -343,6 +343,53 @@ body {
 .explore-legend b { color: #fff; }
 .disclaimer { margin: 10px 0 0; font-size: 11px; color: #5c6a86; font-style: italic; }
 
+/* ---------- signals ---------- */
+.btn-primary.wide { width: 100%; border-radius: 9px; padding: 11px; }
+.signals-result { display: flex; flex-direction: column; gap: 10px; }
+.sig-loading, .sig-error, .sig-empty { font-size: 13px; color: var(--muted); padding: 14px; text-align: center; }
+.sig-error { color: #ffb3bd; }
+.sig-sample { font-size: 12px; color: var(--gold); background: rgba(255,209,102,0.1); border: 1px solid #5a4012; border-radius: 8px; padding: 8px 10px; }
+
+.rating { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.rating.big { font-size: 14px; padding: 5px 13px; }
+.rating.sb { background: rgba(38,161,123,0.28); color: #66ecb6; }
+.rating.b { background: rgba(38,161,123,0.16); color: #6fd3a8; }
+.rating.n { background: rgba(138,147,166,0.18); color: #b3bccf; }
+.rating.s { background: rgba(224,86,106,0.16); color: #ff9aa6; }
+.rating.ss { background: rgba(224,86,106,0.28); color: #ff8090; }
+
+.sig-overall { border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: var(--panel-2); }
+.sig-overall.sb, .sig-overall.b { border-color: rgba(38,161,123,0.5); }
+.sig-overall.ss, .sig-overall.s { border-color: rgba(224,86,106,0.5); }
+.sig-overall-top { display: flex; align-items: center; justify-content: space-between; }
+.sig-overall-top span:first-child { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+.sig-align { font-size: 12.5px; color: #d2d9e8; line-height: 1.5; margin-top: 6px; }
+
+.sig-meter { display: flex; align-items: center; gap: 9px; margin: 10px 0 2px; }
+.sig-meter-track { position: relative; flex: 1; height: 6px; background: linear-gradient(90deg, rgba(224,86,106,0.35), rgba(138,147,166,0.25), rgba(38,161,123,0.35)); border-radius: 999px; }
+.sig-meter-zero { position: absolute; left: 50%; top: -2px; width: 1px; height: 10px; background: rgba(255,255,255,0.3); }
+.sig-meter-dot { position: absolute; top: -3px; width: 12px; height: 12px; border-radius: 50%; transform: translateX(-50%); border: 2px solid #0e1320; }
+.sig-meter-dot.pos { background: #2ad19b; }
+.sig-meter-dot.neg { background: #ff6478; }
+.sig-meter-dot.neu { background: #aeb8cc; }
+.sig-score { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; }
+.sig-score.pos { color: #2ad19b; }
+.sig-score.neg { color: #ff6478; }
+.sig-score.neu { color: #aeb8cc; }
+
+.sig-card { border: 1px solid var(--border); border-radius: 12px; padding: 12px 13px; background: var(--panel-2); }
+.sig-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sig-title { font-size: 13.5px; font-weight: 600; }
+.sig-title small { color: var(--muted); font-weight: 400; font-size: 11px; }
+.sig-factors { display: flex; flex-direction: column; gap: 7px; margin-top: 8px; }
+.sig-factor { display: flex; gap: 8px; align-items: flex-start; }
+.sig-ic { font-size: 11px; line-height: 1.4; margin-top: 1px; }
+.sig-factor.bull .sig-ic { color: #2ad19b; }
+.sig-factor.bear .sig-ic { color: #ff6478; }
+.sig-factor.neutral .sig-ic { color: #8a93a6; }
+.sig-f-label { font-size: 12.5px; font-weight: 600; color: #e8edf6; }
+.sig-f-detail { font-size: 11.5px; color: #9aa3b5; line-height: 1.45; }
+
 /* scrollbars */
 .tutor-view::-webkit-scrollbar { width: 9px; }
 .tutor-view::-webkit-scrollbar-thumb { background: #28324c; border-radius: 999px; }
@@ -438,6 +485,7 @@ body {
       <div class="tabs">
         <button id="tabLessons" class="tab active">📚 Lessons</button>
         <button id="tabExplore" class="tab">🔬 Explore</button>
+        <button id="tabSignals" class="tab">🧭 Signals</button>
       </div>
 
       <!-- LESSONS -->
@@ -510,6 +558,18 @@ body {
           </ul>
           <p class="disclaimer">Educational tool only — not financial advice.</p>
         </div>
+      </div>
+
+      <!-- SIGNALS -->
+      <div id="signalsView" class="tutor-view" style="display:none">
+        <p class="explore-intro">An educational technical read of <b id="sigSymbol">—</b> across
+          three timeframes — long-term, multi-month and intraday. It scores what a chart-reader
+          weighs and explains every signal. <b>Not financial advice.</b></p>
+        <button id="analyzeBtn" class="btn-primary wide">Analyze <span id="analyzeSym">AAPL</span></button>
+        <div id="signalsResult" class="signals-result"></div>
+        <p class="disclaimer">Educational only. Technical signals describe probabilities, not
+          certainties, and are just one input a real investor weighs alongside fundamentals,
+          valuation, the company's business, and risk management. Not financial advice.</p>
       </div>
     </aside>
   </main>
@@ -2401,6 +2461,232 @@ body {
 'use strict';
 
 /**
+ * analysis.js — an educational, rules-based technical signal engine.
+ *
+ * It scores the factors a chart-reader weighs (trend, moving averages,
+ * momentum, support/resistance, volume, range position), explains each one in
+ * plain English, and combines them into a rating from Strong Sell → Strong Buy.
+ * Run it across several timeframes to see where they agree or diverge.
+ *
+ * This is NOT financial advice or a prediction — it describes what the chart is
+ * signalling right now. Exposed on window.Analysis.
+ */
+(function () {
+  const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+
+  function ratingFor(score) {
+    if (score >= 45) return { label: 'Strong Buy', cls: 'sb' };
+    if (score >= 18) return { label: 'Bullish', cls: 'b' };
+    if (score > -18) return { label: 'Neutral', cls: 'n' };
+    if (score > -45) return { label: 'Bearish', cls: 's' };
+    return { label: 'Strong Sell', cls: 'ss' };
+  }
+
+  /** Analyse a single candle series → { score, rating, factors[] }. */
+  function analyze(candles, horizonLabel) {
+    const ta = window.TA;
+    const n = candles ? candles.length : 0;
+    if (!ta || n < 20) return null;
+    const closes = candles.map((c) => c.close);
+    const price = closes[n - 1];
+    const factors = [];
+
+    // --- moving averages ---
+    const ma50 = ta.sma(closes, 50);
+    const ma200 = ta.sma(closes, 200);
+    const m50 = ma50[n - 1];
+    const m200 = ma200[n - 1];
+    if (m50 != null) {
+      const above = price > m50;
+      const rising = m50 > ma50[Math.max(0, n - 10)];
+      factors.push({
+        label: 'Price vs 50-period MA',
+        state: above && rising ? 'bull' : !above && !rising ? 'bear' : 'neutral',
+        weight: 1.4,
+        detail: `Price is ${above ? 'above' : 'below'} a ${rising ? 'rising' : 'falling'} 50-period average (${m50.toFixed(2)}).`
+      });
+    }
+    if (m200 != null) {
+      const above = price > m200;
+      factors.push({
+        label: 'Price vs 200-period MA',
+        state: above ? 'bull' : 'bear',
+        weight: 1.6,
+        detail: `Price is ${above ? 'above' : 'below'} the 200-period average (${m200.toFixed(2)}) — ${above ? 'long-term uptrend bias' : 'long-term downtrend bias'}.`
+      });
+      if (m50 != null) {
+        const golden = m50 >= m200;
+        factors.push({
+          label: '50 / 200 MA cross',
+          state: golden ? 'bull' : 'bear',
+          weight: 1.2,
+          detail: golden
+            ? 'Fast average sits above the slow one (golden-cross regime).'
+            : 'Fast average sits below the slow one (death-cross regime).'
+        });
+      }
+    }
+
+    // --- trend structure ---
+    const t = ta.trend(closes, Math.min(50, Math.max(10, Math.floor(n / 3))));
+    factors.push({
+      label: 'Trend structure',
+      state: t.dir === 'up' ? 'bull' : t.dir === 'down' ? 'bear' : 'neutral',
+      weight: 1.5,
+      detail:
+        t.dir === 'up'
+          ? 'Higher highs and higher lows — an uptrend.'
+          : t.dir === 'down'
+          ? 'Lower highs and lower lows — a downtrend.'
+          : 'Sideways / range-bound — no clear trend.'
+    });
+
+    // --- momentum (RSI) ---
+    const r = ta.rsi(closes, 14)[n - 1];
+    if (r != null) {
+      let state = 'neutral';
+      let detail = `RSI ${r.toFixed(0)} — neutral momentum.`;
+      if (r > 70) {
+        state = 'bear';
+        detail = `RSI ${r.toFixed(0)} — overbought; momentum stretched, pullback risk.`;
+      } else if (r < 30) {
+        state = 'bull';
+        detail = `RSI ${r.toFixed(0)} — oversold; selling may be exhausted, bounce potential.`;
+      } else if (r >= 55) {
+        state = 'bull';
+        detail = `RSI ${r.toFixed(0)} — firm momentum.`;
+      } else if (r <= 45) {
+        state = 'bear';
+        detail = `RSI ${r.toFixed(0)} — soft momentum.`;
+      }
+      factors.push({ label: 'Momentum (RSI)', state, weight: 1.0, detail });
+    }
+
+    // --- support / resistance ---
+    const levels = ta.supportResistance(candles, {
+      lookback: Math.max(4, Math.round(n / 40)),
+      maxLevels: 8,
+      minTouches: 2
+    });
+    if (levels.length) {
+      let nearest = null;
+      let nd = Infinity;
+      for (const l of levels) {
+        const d = Math.abs(price - l.mid) / price;
+        if (d < nd) {
+          nd = d;
+          nearest = l;
+        }
+      }
+      if (nearest && nd < 0.025) {
+        const sup = nearest.role === 'support';
+        factors.push({
+          label: sup ? 'Testing support' : 'Testing resistance',
+          state: sup ? 'bull' : 'bear',
+          weight: 1.1,
+          detail: `Price is at ${nearest.role} near ${nearest.mid.toFixed(2)} (${nearest.touches} touches) — ${sup ? 'a possible bounce zone' : 'a possible rejection zone'}.`
+        });
+      } else {
+        const resAbove = levels.filter((l) => l.mid > price).sort((a, b) => a.mid - b.mid)[0];
+        const supBelow = levels.filter((l) => l.mid < price).sort((a, b) => b.mid - a.mid)[0];
+        if (resAbove && supBelow) {
+          const up = (resAbove.mid - price) / price;
+          const down = (price - supBelow.mid) / price;
+          factors.push({
+            label: 'Level headroom',
+            state: up > down * 1.5 ? 'bull' : down > up * 1.5 ? 'bear' : 'neutral',
+            weight: 0.7,
+            detail: `Nearest resistance ${resAbove.mid.toFixed(2)} (+${(up * 100).toFixed(1)}%), nearest support ${supBelow.mid.toFixed(2)} (−${(down * 100).toFixed(1)}%).`
+          });
+        }
+      }
+    }
+
+    // --- volume confirmation ---
+    const vols = candles.map((c) => c.volume);
+    const avgVol = mean(vols.slice(-20));
+    const recentVol = mean(vols.slice(-3));
+    const chg = price - closes[n - 2];
+    if (avgVol > 0) {
+      const surge = recentVol > avgVol * 1.3;
+      let state = 'neutral';
+      let detail = 'Volume near its average — no strong conviction signal.';
+      if (surge && chg > 0) {
+        state = 'bull';
+        detail = 'Recent gains came on above-average volume — buying conviction.';
+      } else if (surge && chg < 0) {
+        state = 'bear';
+        detail = 'Recent losses came on above-average volume — selling conviction.';
+      }
+      factors.push({ label: 'Volume', state, weight: 0.8, detail });
+    }
+
+    // --- position within range ---
+    const hi = Math.max(...closes);
+    const lo = Math.min(...closes);
+    const pos = (price - lo) / (hi - lo || 1);
+    factors.push({
+      label: 'Range position',
+      state: pos > 0.8 ? 'bull' : pos < 0.2 ? 'bear' : 'neutral',
+      weight: 0.6,
+      detail: `Trading at ${Math.round(pos * 100)}% of its ${horizonLabel} range (${lo.toFixed(2)}–${hi.toFixed(2)}).`
+    });
+
+    // --- composite ---
+    let weighted = 0;
+    let total = 0;
+    for (const f of factors) {
+      const v = f.state === 'bull' ? 1 : f.state === 'bear' ? -1 : 0;
+      weighted += v * f.weight;
+      total += f.weight;
+    }
+    const score = total ? Math.round((weighted / total) * 100) : 0;
+    return { horizon: horizonLabel, price, bars: n, score, rating: ratingFor(score), factors };
+  }
+
+  function alignmentText(o) {
+    const present = [o.longTerm, o.swing, o.intraday].filter(Boolean);
+    const dirs = present.map((h) => (h.score > 18 ? 1 : h.score < -18 ? -1 : 0));
+    if (dirs.length && dirs.every((d) => d > 0)) return 'All timeframes align bullish — trend is up across the board.';
+    if (dirs.length && dirs.every((d) => d < 0)) return 'All timeframes align bearish — trend is down across the board.';
+    const lt = o.longTerm ? o.longTerm.score : 0;
+    const sht = o.intraday ? o.intraday.score : o.swing ? o.swing.score : 0;
+    if (lt > 18 && sht < -18) return 'Longer-term uptrend, but short-term pulling back — a possible dip within an uptrend.';
+    if (lt < -18 && sht > 18) return 'Longer-term downtrend with a short-term bounce — a possible relief rally, not a reversal yet.';
+    return 'Mixed signals across timeframes — no clean alignment, so treat any single signal with caution.';
+  }
+
+  /** Combine three horizons (each an array of candles, any may be null). */
+  function multiHorizon(sets) {
+    const out = {
+      longTerm: analyze(sets.longTerm, 'long-term'),
+      swing: analyze(sets.swing, 'multi-month'),
+      intraday: analyze(sets.intraday, 'intraday')
+    };
+    const parts = [];
+    if (out.longTerm) parts.push([out.longTerm.score, 1.2]);
+    if (out.swing) parts.push([out.swing.score, 1.3]);
+    if (out.intraday) parts.push([out.intraday.score, 0.7]);
+    let w = 0;
+    let s = 0;
+    for (const [sc, wt] of parts) {
+      w += sc * wt;
+      s += wt;
+    }
+    const overallScore = s ? Math.round(w / s) : 0;
+    out.overall = { score: overallScore, rating: ratingFor(overallScore) };
+    out.alignment = alignmentText(out);
+    return out;
+  }
+
+  window.Analysis = { analyze, multiHorizon, ratingFor };
+})();
+
+</script>
+  <script>
+'use strict';
+
+/**
  * app.js — wires the chart, the data layer and the lesson curriculum into the
  * interactive tutor UI: symbol loading, lesson/step navigation, quizzes,
  * click-on-chart exercises and a free "Explore" sandbox.
@@ -2452,6 +2738,7 @@ body {
   // ---- data ----------------------------------------------------------------
   function renderCurrentView() {
     if (state.view === 'lessons') renderStep();
+    else if (state.view === 'signals') prepSignals();
     else applyExplore();
   }
 
@@ -2812,8 +3099,76 @@ body {
   function syncTabs() {
     $('#tabLessons').classList.toggle('active', state.view === 'lessons');
     $('#tabExplore').classList.toggle('active', state.view === 'explore');
+    $('#tabSignals').classList.toggle('active', state.view === 'signals');
     $('#lessonsView').style.display = state.view === 'lessons' ? 'flex' : 'none';
     $('#exploreView').style.display = state.view === 'explore' ? 'block' : 'none';
+    $('#signalsView').style.display = state.view === 'signals' ? 'flex' : 'none';
+  }
+
+  // ---- signals (multi-timeframe technical read) ----------------------------
+  let analyzing = false;
+  function prepSignals() {
+    $('#sigSymbol').textContent = state.symbol;
+    $('#analyzeSym').textContent = state.symbol;
+    if (state._sigSymbol !== state.symbol) runAnalysis();
+  }
+  function sigMeter(score) {
+    const pct = Math.max(0, Math.min(100, (score + 100) / 2));
+    const cls = score >= 18 ? 'pos' : score <= -18 ? 'neg' : 'neu';
+    return (
+      `<div class="sig-meter"><div class="sig-meter-track"><div class="sig-meter-zero"></div>` +
+      `<div class="sig-meter-dot ${cls}" style="left:${pct}%"></div></div>` +
+      `<span class="sig-score ${cls}">${score > 0 ? '+' : ''}${score}</span></div>`
+    );
+  }
+  function sigCard(h, title, subtitle) {
+    if (!h)
+      return `<div class="sig-card"><div class="sig-card-head"><span class="sig-title">${title}</span><span class="rating n">N/A</span></div><div class="sig-empty">No data for this timeframe right now.</div></div>`;
+    const rows = h.factors
+      .map((f) => {
+        const ic = f.state === 'bull' ? '▲' : f.state === 'bear' ? '▼' : '■';
+        return `<div class="sig-factor ${f.state}"><span class="sig-ic">${ic}</span><div><div class="sig-f-label">${f.label}</div><div class="sig-f-detail">${f.detail}</div></div></div>`;
+      })
+      .join('');
+    return `<div class="sig-card"><div class="sig-card-head"><span class="sig-title">${title} <small>${subtitle}</small></span><span class="rating ${h.rating.cls}">${h.rating.label}</span></div>${sigMeter(h.score)}<div class="sig-factors">${rows}</div></div>`;
+  }
+  function renderSignals(box, r, synthetic) {
+    box.innerHTML =
+      (synthetic ? '<div class="sig-sample">⚠ Sample data — start the live server for a real read.</div>' : '') +
+      `<div class="sig-overall ${r.overall.rating.cls}"><div class="sig-overall-top"><span>Overall technical read</span><span class="rating ${r.overall.rating.cls} big">${r.overall.rating.label}</span></div>${sigMeter(r.overall.score)}<div class="sig-align">${r.alignment}</div></div>` +
+      sigCard(r.longTerm, 'Long-term', 'weekly · 5y') +
+      sigCard(r.swing, 'Multi-month', 'daily · 1y') +
+      sigCard(r.intraday, 'Intraday', 'today · 2-min');
+  }
+  async function runAnalysis() {
+    if (analyzing) return;
+    analyzing = true;
+    const sym = state.symbol;
+    state._sigSymbol = sym;
+    const box = $('#signalsResult');
+    box.innerHTML = `<div class="sig-loading">Analyzing ${sym} across timeframes…</div>`;
+    const isFile = location.protocol === 'file:';
+    const get = (range, interval) =>
+      isFile ? Promise.resolve(window.MarketData.loadDemo(sym, range, interval)) : window.MarketData.load(sym, range, interval);
+    const res = await Promise.allSettled([get('5y', '1wk'), get('1y', '1d'), get('1d', '2m')]);
+    if (sym !== state.symbol) {
+      analyzing = false;
+      return; // user switched symbols mid-analysis
+    }
+    const candlesOf = (x) =>
+      x.status === 'fulfilled' && x.value && Array.isArray(x.value.candles) && x.value.candles.length >= 20
+        ? x.value.candles
+        : null;
+    const sets = { longTerm: candlesOf(res[0]), swing: candlesOf(res[1]), intraday: candlesOf(res[2]) };
+    if (!sets.longTerm && !sets.swing && !sets.intraday) {
+      box.innerHTML = `<div class="sig-error">Couldn’t fetch data to analyze ${sym}. Check the ticker and your connection, then click Analyze again.</div>`;
+      analyzing = false;
+      return;
+    }
+    const firstOk = res.find((x) => x.status === 'fulfilled');
+    const synthetic = isFile || (firstOk && firstOk.value && firstOk.value.synthetic);
+    renderSignals(box, window.Analysis.multiHorizon(sets), synthetic);
+    analyzing = false;
   }
 
   // ---- wiring --------------------------------------------------------------
@@ -2846,6 +3201,16 @@ body {
       syncTabs();
       applyExplore();
       save();
+    });
+    $('#tabSignals').addEventListener('click', () => {
+      state.view = 'signals';
+      syncTabs();
+      prepSignals();
+      save();
+    });
+    $('#analyzeBtn').addEventListener('click', () => {
+      state._sigSymbol = null;
+      runAnalysis();
     });
 
     $('#prevBtn').addEventListener('click', () => go(-1));
@@ -2890,9 +3255,7 @@ body {
     bindUI();
     renderLessonList();
     syncTabs();
-    await loadSymbol(state.symbol);
-    if (state.view === 'lessons') renderStep();
-    else applyExplore();
+    await loadSymbol(state.symbol); // also renders the current view (lessons/explore/signals)
 
     // live auto-refresh every ~18s (gentle; server also caches): intraday views
     // re-fetch the full chart, daily views just refresh the live quote price.

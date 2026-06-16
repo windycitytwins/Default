@@ -23,7 +23,7 @@ html = html.replace(
 );
 
 // Inline each script, in order, escaping any stray "</script>" just in case.
-const order = ['indicators.js', 'data.js', 'chart.js', 'lessons.js', 'app.js'];
+const order = ['indicators.js', 'data.js', 'chart.js', 'lessons.js', 'analysis.js', 'app.js'];
 for (const file of order) {
   const code = fs
     .readFileSync(path.join(pub, 'js', file), 'utf8')

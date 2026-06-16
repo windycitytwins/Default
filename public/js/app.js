@@ -52,6 +52,7 @@
   // ---- data ----------------------------------------------------------------
   function renderCurrentView() {
     if (state.view === 'lessons') renderStep();
+    else if (state.view === 'signals') prepSignals();
     else applyExplore();
   }
 
@@ -412,8 +413,76 @@
   function syncTabs() {
     $('#tabLessons').classList.toggle('active', state.view === 'lessons');
     $('#tabExplore').classList.toggle('active', state.view === 'explore');
+    $('#tabSignals').classList.toggle('active', state.view === 'signals');
     $('#lessonsView').style.display = state.view === 'lessons' ? 'flex' : 'none';
     $('#exploreView').style.display = state.view === 'explore' ? 'block' : 'none';
+    $('#signalsView').style.display = state.view === 'signals' ? 'flex' : 'none';
+  }
+
+  // ---- signals (multi-timeframe technical read) ----------------------------
+  let analyzing = false;
+  function prepSignals() {
+    $('#sigSymbol').textContent = state.symbol;
+    $('#analyzeSym').textContent = state.symbol;
+    if (state._sigSymbol !== state.symbol) runAnalysis();
+  }
+  function sigMeter(score) {
+    const pct = Math.max(0, Math.min(100, (score + 100) / 2));
+    const cls = score >= 18 ? 'pos' : score <= -18 ? 'neg' : 'neu';
+    return (
+      `<div class="sig-meter"><div class="sig-meter-track"><div class="sig-meter-zero"></div>` +
+      `<div class="sig-meter-dot ${cls}" style="left:${pct}%"></div></div>` +
+      `<span class="sig-score ${cls}">${score > 0 ? '+' : ''}${score}</span></div>`
+    );
+  }
+  function sigCard(h, title, subtitle) {
+    if (!h)
+      return `<div class="sig-card"><div class="sig-card-head"><span class="sig-title">${title}</span><span class="rating n">N/A</span></div><div class="sig-empty">No data for this timeframe right now.</div></div>`;
+    const rows = h.factors
+      .map((f) => {
+        const ic = f.state === 'bull' ? '▲' : f.state === 'bear' ? '▼' : '■';
+        return `<div class="sig-factor ${f.state}"><span class="sig-ic">${ic}</span><div><div class="sig-f-label">${f.label}</div><div class="sig-f-detail">${f.detail}</div></div></div>`;
+      })
+      .join('');
+    return `<div class="sig-card"><div class="sig-card-head"><span class="sig-title">${title} <small>${subtitle}</small></span><span class="rating ${h.rating.cls}">${h.rating.label}</span></div>${sigMeter(h.score)}<div class="sig-factors">${rows}</div></div>`;
+  }
+  function renderSignals(box, r, synthetic) {
+    box.innerHTML =
+      (synthetic ? '<div class="sig-sample">⚠ Sample data — start the live server for a real read.</div>' : '') +
+      `<div class="sig-overall ${r.overall.rating.cls}"><div class="sig-overall-top"><span>Overall technical read</span><span class="rating ${r.overall.rating.cls} big">${r.overall.rating.label}</span></div>${sigMeter(r.overall.score)}<div class="sig-align">${r.alignment}</div></div>` +
+      sigCard(r.longTerm, 'Long-term', 'weekly · 5y') +
+      sigCard(r.swing, 'Multi-month', 'daily · 1y') +
+      sigCard(r.intraday, 'Intraday', 'today · 2-min');
+  }
+  async function runAnalysis() {
+    if (analyzing) return;
+    analyzing = true;
+    const sym = state.symbol;
+    state._sigSymbol = sym;
+    const box = $('#signalsResult');
+    box.innerHTML = `<div class="sig-loading">Analyzing ${sym} across timeframes…</div>`;
+    const isFile = location.protocol === 'file:';
+    const get = (range, interval) =>
+      isFile ? Promise.resolve(window.MarketData.loadDemo(sym, range, interval)) : window.MarketData.load(sym, range, interval);
+    const res = await Promise.allSettled([get('5y', '1wk'), get('1y', '1d'), get('1d', '2m')]);
+    if (sym !== state.symbol) {
+      analyzing = false;
+      return; // user switched symbols mid-analysis
+    }
+    const candlesOf = (x) =>
+      x.status === 'fulfilled' && x.value && Array.isArray(x.value.candles) && x.value.candles.length >= 20
+        ? x.value.candles
+        : null;
+    const sets = { longTerm: candlesOf(res[0]), swing: candlesOf(res[1]), intraday: candlesOf(res[2]) };
+    if (!sets.longTerm && !sets.swing && !sets.intraday) {
+      box.innerHTML = `<div class="sig-error">Couldn’t fetch data to analyze ${sym}. Check the ticker and your connection, then click Analyze again.</div>`;
+      analyzing = false;
+      return;
+    }
+    const firstOk = res.find((x) => x.status === 'fulfilled');
+    const synthetic = isFile || (firstOk && firstOk.value && firstOk.value.synthetic);
+    renderSignals(box, window.Analysis.multiHorizon(sets), synthetic);
+    analyzing = false;
   }
 
   // ---- wiring --------------------------------------------------------------
@@ -446,6 +515,16 @@
       syncTabs();
       applyExplore();
       save();
+    });
+    $('#tabSignals').addEventListener('click', () => {
+      state.view = 'signals';
+      syncTabs();
+      prepSignals();
+      save();
+    });
+    $('#analyzeBtn').addEventListener('click', () => {
+      state._sigSymbol = null;
+      runAnalysis();
     });
 
     $('#prevBtn').addEventListener('click', () => go(-1));
@@ -490,9 +569,7 @@
     bindUI();
     renderLessonList();
     syncTabs();
-    await loadSymbol(state.symbol);
-    if (state.view === 'lessons') renderStep();
-    else applyExplore();
+    await loadSymbol(state.symbol); // also renders the current view (lessons/explore/signals)
 
     // live auto-refresh every ~18s (gentle; server also caches): intraday views
     // re-fetch the full chart, daily views just refresh the live quote price.
