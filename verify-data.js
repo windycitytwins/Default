@@ -1,72 +1,80 @@
 'use strict';
 
 /**
- * verify-data.js — prove the data is real & accurate.
+ * verify-data.js — prove the data is real & accurate, and diagnose failures.
  *
  *   node verify-data.js AAPL
  *   node verify-data.js MSFT 5d 15m
  *
- * Fetches via the exact same providers the app uses and prints the most recent
- * bars so you can compare them against finance.yahoo.com / Google Finance.
+ * On success it prints the latest real bars (cross-check against Yahoo/Google).
+ * On failure it prints a per-provider report (HTTP status + response snippet)
+ * so the exact cause is visible.
  */
-const { fromYahoo, fromStooq } = require('./server.js');
+const { loadChart, diagnose } = require('./server.js');
 
 const symbol = (process.argv[2] || 'AAPL').toUpperCase();
 const range = process.argv[3] || '1mo';
 const interval = process.argv[4] || '1d';
 
-function fmt(n) {
-  return n == null ? '—' : Number(n).toFixed(2);
-}
-function fmtVol(n) {
-  if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
-  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
-  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
-  return String(n);
-}
-function printRows(data) {
+const f2 = (n) => (n == null ? '—' : Number(n).toFixed(2));
+const fv = (n) => (n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(n || 0));
+
+function printBars(data) {
   const rows = data.candles.slice(-7);
-  console.log(`\n  Source:    ${data.source}`);
-  if (data.name) console.log(`  Name:      ${data.name}`);
-  if (data.exchange) console.log(`  Exchange:  ${data.exchange} ${data.currency ? '(' + data.currency + ')' : ''}`);
-  console.log(`  Fetched:   ${new Date(data.fetchedAt || Date.now()).toLocaleString()}`);
-  console.log(`  Bars:      ${data.candles.length} total · showing last ${rows.length}\n`);
-  console.log('  ' + ['Date/Time', 'Open', 'High', 'Low', 'Close', 'Volume'].map((h, i) => (i === 0 ? h.padEnd(20) : h.padStart(10))).join(''));
-  console.log('  ' + '-'.repeat(80));
+  console.log(`\n  ✅ SUCCESS — real data via ${data.source}`);
+  if (data.name) console.log(`     ${data.name}  ${data.exchange ? '· ' + data.exchange : ''} ${data.currency ? '(' + data.currency + ')' : ''}`);
+  console.log(`     ${data.candles.length} bars · fetched ${new Date(data.fetchedAt || Date.now()).toLocaleString()}\n`);
+  console.log('  ' + ['Date/Time', 'Open', 'High', 'Low', 'Close', 'Volume'].map((h, i) => (i === 0 ? h.padEnd(21) : h.padStart(11))).join(''));
+  console.log('  ' + '-'.repeat(86));
   for (const c of rows) {
     const d = new Date(c.time);
-    const label = interval.match(/m|h/) ? d.toLocaleString() : d.toISOString().slice(0, 10);
-    console.log(
-      '  ' +
-        label.padEnd(20) +
-        fmt(c.open).padStart(10) +
-        fmt(c.high).padStart(10) +
-        fmt(c.low).padStart(10) +
-        fmt(c.close).padStart(10) +
-        fmtVol(c.volume).padStart(10)
-    );
+    const label = /m|h/.test(interval) ? d.toLocaleString() : d.toISOString().slice(0, 10);
+    console.log('  ' + label.padEnd(21) + f2(c.open).padStart(11) + f2(c.high).padStart(11) + f2(c.low).padStart(11) + f2(c.close).padStart(11) + fv(c.volume).padStart(11));
   }
   const last = data.candles[data.candles.length - 1];
-  console.log(`\n  ✅ Latest close: ${data.currency || '$'} ${fmt(last.close)}  (as of ${new Date(last.time).toLocaleString()})`);
-  console.log(`\n  Cross-check this against:`);
-  console.log(`     https://finance.yahoo.com/quote/${symbol}`);
-  console.log(`     https://www.google.com/finance/quote/${symbol}\n`);
+  console.log(`\n  Latest close: ${f2(last.close)}  (as of ${new Date(last.time).toLocaleString()})`);
+  console.log(`  Cross-check:  https://finance.yahoo.com/quote/${symbol}\n`);
+}
+
+function printDiagnostics(report) {
+  console.log(`\n  ❌ Could not fetch real data for ${symbol}. Per-provider report:\n`);
+  for (const a of report.attempts) {
+    if (a.ok) {
+      console.log(`     ✓ ${a.provider}: OK (${a.bars} bars, ${a.ms}ms) latest close ${f2(a.latest.close)}`);
+    } else {
+      console.log(`     ✗ ${a.provider}: ${a.error}  [HTTP ${a.status}, ${a.ms}ms]`);
+      if (a.snippet) console.log(`        ↳ ${a.snippet}`);
+    }
+  }
+  console.log('');
+  const yahoo429 = report.attempts.find((a) => a.provider.includes('Yahoo') && /429/.test(String(a.status)));
+  if (yahoo429) {
+    console.log('  Yahoo is rate-limiting this IP (HTTP 429). Options:');
+    console.log('    • Wait a few minutes and try again (limits are temporary), or');
+    console.log('    • Use the free, reliable Twelve Data backup (1-minute signup, no cost):');
+    console.log('        1. Get a key at https://twelvedata.com/pricing  (Basic = free)');
+    console.log('        2. Restart with:  TWELVEDATA_KEY=your_key node server.js');
+    console.log('        3. Re-verify:     TWELVEDATA_KEY=your_key node verify-data.js ' + symbol);
+  } else if (!report.twelveDataKey) {
+    console.log('  Tip: a free Twelve Data key makes this bulletproof —');
+    console.log('       https://twelvedata.com/pricing  then  TWELVEDATA_KEY=key node server.js');
+  }
+  console.log('');
 }
 
 (async () => {
   console.log(`\n  Verifying real data for ${symbol}  (range=${range}, interval=${interval})…`);
   try {
-    const data = await fromYahoo(symbol, range, interval);
-    printRows(data);
-  } catch (e) {
-    console.log(`\n  Yahoo failed (${e.message}); trying Stooq backup…`);
+    const { data } = await loadChart(symbol, range, interval);
+    printBars(data);
+    process.exit(0);
+  } catch (_) {
     try {
-      const data = await fromStooq(symbol);
-      printRows(data);
-    } catch (e2) {
-      console.error(`\n  ❌ Could not fetch real data: ${e2.message}`);
-      console.error(`     Check the ticker symbol and your internet connection.\n`);
-      process.exit(1);
+      const report = await diagnose(symbol);
+      printDiagnostics(report);
+    } catch (e) {
+      console.error('  Diagnostics failed:', e.message);
     }
+    process.exit(1);
   }
 })();

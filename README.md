@@ -51,8 +51,35 @@ node server.js
 
 Then open **http://localhost:8123**.
 
+First, confirm you're getting real, accurate data (compare to finance.yahoo.com):
+
+```bash
+node verify-data.js AAPL          # daily; also: node verify-data.js TSLA 5d 15m
+```
+
 > Tip: change the port with `PORT=8080 node server.js`.
 > Build/refresh the standalone file with `node build-standalone.js`.
+
+## Reliability & accuracy
+
+- Data comes from **Yahoo Finance** (a full cookie + crumb handshake, retries
+  and host rotation), with **Stooq** as a keyless daily backstop. Numbers match
+  finance.yahoo.com.
+- **It never fabricates data.** If every real source fails you get a clear error
+  with the reason; "sample data" only appears if you explicitly choose it.
+- **If Yahoo rate-limits you (HTTP 429)** — its free endpoint occasionally does —
+  either wait a few minutes, or add a **free, no-cost** Twelve Data key for a
+  rock-solid backup:
+  1. Get a key (Basic plan = free): https://twelvedata.com/pricing
+  2. Start with it:
+     ```bash
+     TWELVEDATA_KEY=your_key node server.js
+     ```
+  When set, Twelve Data is used first and the app becomes essentially
+  bulletproof. Still 100% free and local.
+- Diagnose any time: `node verify-data.js SYMBOL` prints a per-provider report
+  (HTTP status + response) so failures are never a mystery. There's also a
+  `GET /api/diagnose?symbol=AAPL` endpoint.
 
 ### Using it
 
