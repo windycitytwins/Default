@@ -22,6 +22,12 @@ moving averages, volume, and RSI.
   6. ⚡ **Momentum (RSI)** — overbought/oversold, divergence
   7. 🎯 **Putting It Together** — reading with confluence + a final check
 - **An Explore sandbox** — toggle any indicator on any symbol and practise.
+- **A Signals tab** — an educational multi-timeframe technical read (Strong Sell →
+  Strong Buy) with a full factor-by-factor breakdown.
+- **A Screener tab** — ranks an editable watchlist as swing-trade candidates using
+  a 9/21-EMA & SMA-stack method with relative strength vs the market,
+  constructive-pullback detection and breakdown ("exit") flags. *Educational, not
+  advice; chart-structure only (no paid options-flow / dark-pool data).*
 - **Real, accurate live & historical data — free, no API key.** A tiny Node
   proxy fetches prices from **Yahoo Finance** (the same feed behind
   finance.yahoo.com), with **Stooq** as an accuracy backstop. It uses

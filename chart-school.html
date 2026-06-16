@@ -390,6 +390,38 @@ body {
 .sig-f-label { font-size: 12.5px; font-weight: 600; color: #e8edf6; }
 .sig-f-detail { font-size: 11.5px; color: #9aa3b5; line-height: 1.45; }
 
+/* ---------- screener ---------- */
+.wl-add { display: flex; gap: 6px; margin-bottom: 9px; }
+.wl-add input { flex: 1; padding: 8px 10px; background: #0e1424; border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; text-transform: uppercase; outline: none; }
+.wl-add input:focus { border-color: var(--accent); }
+.wl-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.wl-chip { display: inline-flex; align-items: center; gap: 5px; background: #0e1424; border: 1px solid var(--border); border-radius: 999px; padding: 4px 6px 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.wl-chip:hover { border-color: var(--accent); }
+.wl-x { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
+.wl-x:hover { color: var(--down); }
+
+.screener-result { display: flex; flex-direction: column; }
+.scr-head, .scr-row { display: grid; grid-template-columns: 26px minmax(56px, 1fr) 36px minmax(74px, 1.1fr) 44px; align-items: center; gap: 6px; }
+.scr-head { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); padding: 6px 4px; border-bottom: 1px solid var(--border); }
+.scr-row { padding: 9px 4px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.scr-row:hover { background: var(--panel-2); }
+.scr-rank { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; text-align: center; }
+.scr-sym { font-weight: 700; font-size: 13.5px; display: flex; flex-direction: column; line-height: 1.2; }
+.scr-sym small { font-weight: 500; font-size: 10.5px; color: var(--muted); }
+.scr-score { text-align: center; font-variant-numeric: tabular-nums; padding: 3px 0; }
+.scr-setup { font-size: 11.5px; color: #cfd6e6; }
+.scr-setup.bad { color: #ff8090; font-weight: 600; }
+.scr-rs { font-size: 12px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.scr-rs.pos { color: #2ad19b; }
+.scr-rs.neg { color: #ff6478; }
+.scr-detail { display: none; padding: 0 4px 10px 30px; }
+.scr-detail.open { display: block; }
+.scr-bullets { background: #0e1424; border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; display: flex; flex-direction: column; gap: 6px; }
+.scr-b { font-size: 11.5px; color: #aab3c5; line-height: 1.45; display: flex; gap: 7px; }
+.scr-b span { font-size: 10px; margin-top: 1px; }
+.scr-b.g span { color: #2ad19b; }
+.scr-b.x span { color: #6b7488; }
+
 /* scrollbars */
 .tutor-view::-webkit-scrollbar { width: 9px; }
 .tutor-view::-webkit-scrollbar-thumb { background: #28324c; border-radius: 999px; }
@@ -483,9 +515,10 @@ body {
 
     <aside class="tutor-pane">
       <div class="tabs">
-        <button id="tabLessons" class="tab active">📚 Lessons</button>
+        <button id="tabLessons" class="tab">📚 Lessons</button>
         <button id="tabExplore" class="tab">🔬 Explore</button>
         <button id="tabSignals" class="tab">🧭 Signals</button>
+        <button id="tabScreener" class="tab">🔎 Screener</button>
       </div>
 
       <!-- LESSONS -->
@@ -580,6 +613,26 @@ body {
         <p class="disclaimer">Educational only. Technical signals describe probabilities, not
           certainties, and are just one input a real investor weighs alongside fundamentals,
           valuation, the company's business, and risk management. Not financial advice.</p>
+      </div>
+
+      <!-- SCREENER -->
+      <div id="screenerView" class="tutor-view" style="display:none">
+        <p class="explore-intro">A swing-trade screener for your watchlist — ranked by a
+          9/21-EMA &amp; SMA-stack method with relative strength, constructive-pullback and
+          breakdown detection. <b>Educational, not advice.</b></p>
+        <div class="control-group">
+          <h3>Watchlist</h3>
+          <div class="wl-add">
+            <input id="wlInput" type="text" maxlength="12" placeholder="Add ticker…" spellcheck="false" />
+            <button id="wlAddBtn" class="btn-ghost">Add</button>
+          </div>
+          <div id="wlChips" class="wl-chips"></div>
+        </div>
+        <button id="runScreenerBtn" class="btn-primary wide">Run screener</button>
+        <div id="screenerResult" class="screener-result"></div>
+        <p class="disclaimer">Educational only. A free/keyless feed can't see dark-pool prints or
+          options flow, and this isn't a whole-market scan — it ranks your watchlist on chart
+          structure. Not financial advice.</p>
       </div>
     </aside>
   </main>
@@ -1062,6 +1115,7 @@ body {
   async function load(symbol, range = '1y', interval = '1d', opts = {}) {
     const params = new URLSearchParams({ symbol, range, interval });
     if (opts.adjusted) params.set('adjusted', '1');
+    if (opts.quote === false) params.set('noquote', '1');
     let res, json;
     try {
       res = await fetch('/api/chart?' + params.toString(), { headers: { Accept: 'application/json' } });
@@ -3159,6 +3213,185 @@ body {
 'use strict';
 
 /**
+ * screener.js — a swing-trade scoring engine that encodes a specific
+ * methodology (educational, not advice):
+ *
+ *   • Primary lens: the 9 & 21 EMAs, then the 20/50/100/200 SMAs.
+ *   • Rewards "accommodative" charts with room to run; flags extended ones.
+ *   • Treats a low-volume pullback to a rising EMA/support as a CONSTRUCTIVE
+ *     setup (don't get shaken out), not a sell.
+ *   • Uses relative strength vs the market (SPX/SPY) as a leadership proxy.
+ *   • Flags names breaking down below the 50/100/200 as "avoid / exit".
+ *   • Does NOT penalise a high PE or an overbought RSI on a strong leader.
+ *
+ * Pure functions on window.Screener. Weights sum to 100 → score is 0-100.
+ */
+(function () {
+  const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+  const pct = (a, b) => (b ? ((a - b) / b) * 100 : 0);
+
+  /** Market context for relative strength: { ret21, ret63 } from SPY closes. */
+  function marketContext(spyCandles) {
+    if (!spyCandles || spyCandles.length < 64) return { ret21: 0, ret63: 0 };
+    const c = spyCandles.map((x) => x.close);
+    const n = c.length;
+    return { ret21: pct(c[n - 1], c[n - 22]), ret63: pct(c[n - 1], c[n - 64]) };
+  }
+
+  function score(candles, market) {
+    const ta = window.TA;
+    const n = candles ? candles.length : 0;
+    if (!ta || n < 60) return null;
+    const closes = candles.map((c) => c.close);
+    const price = closes[n - 1];
+    market = market || { ret21: 0, ret63: 0 };
+
+    const ema9 = ta.ema(closes, 9);
+    const ema21 = ta.ema(closes, 21);
+    const e9 = ema9[n - 1];
+    const e21 = ema21[n - 1];
+    const s20 = ta.sma(closes, 20)[n - 1];
+    const s50 = ta.sma(closes, 50)[n - 1];
+    const s100 = ta.sma(closes, 100)[n - 1];
+    const s200 = ta.sma(closes, 200)[n - 1];
+    const rsi = ta.rsi(closes, 14)[n - 1];
+    const adxObj = ta.adx(candles, 14);
+    const adx = adxObj.adx[n - 1];
+    const diUp = adxObj.plusDI[n - 1] >= adxObj.minusDI[n - 1];
+    const macd = ta.macd(closes);
+    const macdBull = macd.macd[n - 1] != null && macd.signal[n - 1] != null && macd.macd[n - 1] > macd.signal[n - 1];
+
+    const bullets = [];
+    let pts = 0;
+    const push = (txt, good) => bullets.push({ txt, good });
+
+    // 1) EMA 9/21 structure — primary (max 25)
+    const e9Rising = e9 != null && e9 > ema9[Math.max(0, n - 6)];
+    let ema = 8;
+    let emaTxt = 'Mixed around the 9/21 EMAs.';
+    if (price > e9 && e9 > e21 && e9Rising) {
+      ema = 25;
+      emaTxt = 'Price > EMA 9 > EMA 21, both rising — strong short-term uptrend.';
+    } else if (price > e21 && e9 >= e21) {
+      ema = 18;
+      emaTxt = 'Above a rising EMA 9/21 — constructive.';
+    } else if (price > e21) {
+      ema = 12;
+      emaTxt = 'Above EMA 21 but the EMA 9 is soft.';
+    } else if (price < e9 && e9 < e21) {
+      ema = 2;
+      emaTxt = 'Price < EMA 9 < EMA 21 — short-term downtrend.';
+    }
+    pts += ema;
+    push(emaTxt, ema >= 15);
+
+    // 2) SMA stack 20/50/100/200 (max 20)
+    let above = 0;
+    [s20, s50, s100, s200].forEach((s) => {
+      if (s != null && price > s) above++;
+    });
+    const stacked = s20 != null && s50 != null && s100 != null && s200 != null && s20 > s50 && s50 > s100 && s100 > s200;
+    const sma = (above / 4) * 14 + (stacked ? 6 : 0);
+    pts += sma;
+    push(`Above ${above}/4 key SMAs${stacked ? '; bullishly stacked (20>50>100>200)' : ''}.`, sma >= 12);
+
+    // 3) Relative strength vs market (max 15)
+    const ret63 = pct(price, closes[Math.max(0, n - 64)]);
+    const ret21 = pct(price, closes[Math.max(0, n - 22)]);
+    const rs63 = ret63 - market.ret63;
+    const rsScore = rs63 > 10 ? 15 : rs63 > 3 ? 12 : rs63 > -3 ? 8 : rs63 > -10 ? 4 : 1;
+    pts += rsScore;
+    push(
+      `3-mo return ${ret63.toFixed(0)}% vs market ${market.ret63.toFixed(0)}% (RS ${rs63 >= 0 ? '+' : ''}${rs63.toFixed(0)}%) — ${rs63 > 3 ? 'a leader' : rs63 < -3 ? 'a laggard' : 'in-line'}.`,
+      rs63 > 3
+    );
+
+    // 4) Accommodative chart + constructive pullback (max 15)
+    const extPct = e21 ? pct(price, e21) : 0;
+    const recentRet = pct(price, closes[Math.max(0, n - 4)]);
+    const vols = candles.map((c) => c.volume);
+    const avgVol = mean(vols.slice(-20));
+    const recentVol = mean(vols.slice(-3));
+    const lowVolPull = recentRet < 0 && avgVol > 0 && recentVol < avgVol * 0.95;
+    const nearEma = Math.abs(extPct) < 6;
+    let acc = 8;
+    let accTxt = `Extension ${extPct.toFixed(0)}% from EMA 21 — neutral.`;
+    if (price > e21 && extPct < 8) {
+      acc = 13;
+      accTxt = `Only ${extPct.toFixed(0)}% above EMA 21 — accommodative, room to run.`;
+    }
+    if (lowVolPull && price > e21 && nearEma) {
+      acc = 15;
+      accTxt = 'Low-volume pullback to the rising EMA — constructive swing setup (don’t get shaken out).';
+    }
+    if (extPct > 20) {
+      acc = 5;
+      accTxt = `Stretched ${extPct.toFixed(0)}% above EMA 21 — extended, less room.`;
+    }
+    pts += acc;
+    push(accTxt, acc >= 12);
+
+    // 5) Trend strength + MACD (max 12)
+    let tm = 4;
+    if (adx != null) {
+      if (adx >= 25 && diUp && macdBull) tm = 12;
+      else if (adx >= 20 && diUp) tm = 9;
+      else if (adx >= 25 && !diUp) tm = 2;
+      else tm = 5;
+    }
+    pts += tm;
+    push(`ADX ${adx != null ? adx.toFixed(0) : '–'} (${diUp ? 'up' : 'down'}), MACD ${macdBull ? 'bullish' : 'bearish'}.`, tm >= 9);
+
+    // 6) Volume / accumulation (max 8)
+    let vol = 4;
+    if (avgVol > 0) {
+      if (recentVol > avgVol * 1.2 && recentRet > 0) vol = 8;
+      else if (recentVol > avgVol * 1.2 && recentRet < 0) vol = 2;
+    }
+    pts += vol;
+    push(vol >= 6 ? 'Recent advance on above-average volume — accumulation.' : vol <= 2 ? 'Heavy-volume selling — distribution risk.' : 'Volume near average.', vol >= 6);
+
+    // 7) RSI (max 5) — don't punish strong leaders for being overbought
+    let rsiScore = 3;
+    if (rsi != null) {
+      if (rsi >= 50 && rsi <= 80) rsiScore = 5;
+      else if (rsi > 80) rsiScore = 4;
+      else if (rsi < 30) rsiScore = 3;
+      else rsiScore = 2;
+    }
+    pts += rsiScore;
+
+    // Breakdown override (his exit rule)
+    const breaking = s50 != null && price < s50 && s100 != null && price < s100 && s200 != null && price < s200 && !diUp;
+    let scoreOut = Math.round(pts);
+    if (breaking) scoreOut = Math.min(scoreOut, 22);
+
+    let setup;
+    if (breaking) setup = 'Breaking down — exit';
+    else if (extPct > 20) setup = 'Extended';
+    else if (lowVolPull && price > e21 && nearEma) setup = 'Constructive pullback';
+    else if (price > e9 && e9 > e21 && stacked && above >= 3) setup = 'Trending up';
+    else if (price > e21) setup = 'Uptrend';
+    else if (adx != null && adx < 20 && Math.abs(extPct) < 6) setup = 'Basing';
+    else setup = 'Weak / downtrend';
+
+    return {
+      score: Math.max(0, Math.min(100, scoreOut)),
+      setup,
+      breaking,
+      bullets,
+      metrics: { price, rs63, ret63, ret21, extPct, adx, rsi, above, stacked, macdBull, chgPct: pct(price, closes[n - 2]) }
+    };
+  }
+
+  window.Screener = { score, marketContext };
+})();
+
+</script>
+  <script>
+'use strict';
+
+/**
  * app.js — wires the chart, the data layer and the lesson curriculum into the
  * interactive tutor UI: symbol loading, lesson/step navigation, quizzes,
  * click-on-chart exercises and a free "Explore" sandbox.
@@ -3187,13 +3420,15 @@ body {
 
   let chart;
   const C = { ma20: '#46b3ff', ma50: '#ffb020', ma200: '#e36bf0', ema: '#5be0c0' };
+  const DEFAULT_WATCHLIST = ['NVDA', 'AAPL', 'MSFT', 'META', 'AMZN', 'GOOGL', 'AMD', 'AVGO', 'TSLA', 'NFLX', 'PLTR', 'COIN', 'MSTR', 'SMCI', 'CRM', 'UBER', 'CIFR', 'QQQ', 'SPY'];
+  state.watchlist = DEFAULT_WATCHLIST.slice();
 
   // ---- persistence ---------------------------------------------------------
   function save() {
     try {
       localStorage.setItem(
         LS_KEY,
-        JSON.stringify({ symbol: state.symbol, lessonIdx: state.lessonIdx, stepIdx: state.stepIdx, view: state.view })
+        JSON.stringify({ symbol: state.symbol, lessonIdx: state.lessonIdx, stepIdx: state.stepIdx, view: state.view, watchlist: state.watchlist })
       );
     } catch (_) {}
   }
@@ -3204,6 +3439,7 @@ body {
       if (Number.isInteger(s.lessonIdx)) state.lessonIdx = s.lessonIdx;
       if (Number.isInteger(s.stepIdx)) state.stepIdx = s.stepIdx;
       if (s.view) state.view = s.view;
+      if (Array.isArray(s.watchlist) && s.watchlist.length) state.watchlist = s.watchlist;
     } catch (_) {}
   }
 
@@ -3211,6 +3447,7 @@ body {
   function renderCurrentView() {
     if (state.view === 'lessons') renderStep();
     else if (state.view === 'signals') prepSignals();
+    else if (state.view === 'screener') renderWatchlist();
     else applyExplore();
   }
 
@@ -3584,9 +3821,124 @@ body {
     $('#tabLessons').classList.toggle('active', state.view === 'lessons');
     $('#tabExplore').classList.toggle('active', state.view === 'explore');
     $('#tabSignals').classList.toggle('active', state.view === 'signals');
+    $('#tabScreener').classList.toggle('active', state.view === 'screener');
     $('#lessonsView').style.display = state.view === 'lessons' ? 'flex' : 'none';
     $('#exploreView').style.display = state.view === 'explore' ? 'block' : 'none';
     $('#signalsView').style.display = state.view === 'signals' ? 'flex' : 'none';
+    $('#screenerView').style.display = state.view === 'screener' ? 'flex' : 'none';
+  }
+
+  // ---- screener (swing-trade watchlist ranker) -----------------------------
+  let screening = false;
+  function renderWatchlist() {
+    const box = $('#wlChips');
+    box.innerHTML = '';
+    state.watchlist.forEach((sym) => {
+      const chip = el('span', 'wl-chip', `${sym}<button class="wl-x" data-sym="${sym}" aria-label="remove">×</button>`);
+      chip.querySelector('.wl-x').addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.watchlist = state.watchlist.filter((s) => s !== sym);
+        renderWatchlist();
+        save();
+      });
+      chip.addEventListener('click', () => loadSymbol(sym));
+      box.appendChild(chip);
+    });
+  }
+  function addWatch(sym) {
+    sym = (sym || '').toUpperCase().trim().slice(0, 12);
+    if (!sym || state.watchlist.includes(sym)) return;
+    state.watchlist.push(sym);
+    $('#wlInput').value = '';
+    renderWatchlist();
+    save();
+  }
+  // concurrency-limited async map
+  async function mapPool(items, limit, fn, onProgress) {
+    const out = new Array(items.length);
+    let idx = 0;
+    let done = 0;
+    const worker = async () => {
+      while (idx < items.length) {
+        const i = idx++;
+        try {
+          out[i] = await fn(items[i]);
+        } catch (_) {
+          out[i] = null;
+        }
+        done++;
+        if (onProgress) onProgress(done, items.length);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return out;
+  }
+  async function runScreener() {
+    if (screening) return;
+    screening = true;
+    const box = $('#screenerResult');
+    const isFile = location.protocol === 'file:';
+    const fetchBars = (sym) =>
+      isFile
+        ? Promise.resolve(window.MarketData.loadDemo(sym, '1y', '1d'))
+        : window.MarketData.load(sym, '1y', '1d', { quote: false });
+    box.innerHTML = '<div class="sig-loading">Fetching market (SPY)…</div>';
+    let market = { ret21: 0, ret63: 0 };
+    try {
+      const spy = await fetchBars('SPY');
+      market = window.Screener.marketContext(spy.candles);
+    } catch (_) {}
+    const list = state.watchlist.slice();
+    box.innerHTML = `<div class="sig-loading">Scoring 0/${list.length}…</div>`;
+    const datas = await mapPool(list, 4, fetchBars, (done, total) => {
+      box.innerHTML = `<div class="sig-loading">Scoring ${done}/${total}…</div>`;
+    });
+    const rows = [];
+    list.forEach((sym, i) => {
+      const d = datas[i];
+      if (!d || !Array.isArray(d.candles) || d.candles.length < 60) return;
+      const r = window.Screener.score(d.candles, market);
+      if (r) rows.push({ sym, ...r, synthetic: d.synthetic });
+    });
+    rows.sort((a, b) => b.score - a.score);
+    renderScreener(box, rows, isFile);
+    screening = false;
+  }
+  function scoreClass(s) {
+    return s >= 70 ? 'sb' : s >= 55 ? 'b' : s >= 40 ? 'n' : s >= 25 ? 's' : 'ss';
+  }
+  function renderScreener(box, rows, synthetic) {
+    if (!rows.length) {
+      box.innerHTML = '<div class="sig-error">Couldn’t score any names — check tickers / connection and run again.</div>';
+      return;
+    }
+    const head =
+      (synthetic ? '<div class="sig-sample">⚠ Sample data — start the live server for a real screen.</div>' : '') +
+      '<div class="scr-head"><span>#</span><span>Symbol</span><span>Score</span><span>Setup</span><span>RS</span></div>';
+    box.innerHTML = head + rows.map((r, i) => rowHtml(r, i)).join('');
+    box.querySelectorAll('.scr-row').forEach((rowEl) => {
+      rowEl.addEventListener('click', () => {
+        const sym = rowEl.dataset.sym;
+        loadSymbol(sym);
+        const det = rowEl.nextElementSibling;
+        if (det && det.classList.contains('scr-detail')) det.classList.toggle('open');
+      });
+    });
+  }
+  function rowHtml(r, i) {
+    const cls = scoreClass(r.score);
+    const rs = r.metrics.rs63;
+    const bullets = r.bullets.map((b) => `<div class="scr-b ${b.good ? 'g' : 'x'}"><span>${b.good ? '▲' : '·'}</span>${b.txt}</div>`).join('');
+    return (
+      `<div class="scr-row" data-sym="${r.sym}">` +
+      `<span class="scr-rank">${i + 1}</span>` +
+      `<span class="scr-sym">${r.sym}<small>${r.metrics.chgPct >= 0 ? '+' : ''}${r.metrics.chgPct.toFixed(1)}%</small></span>` +
+      `<span class="rating ${cls} scr-score">${r.score}</span>` +
+      `<span class="scr-setup ${r.breaking ? 'bad' : ''}">${r.setup}</span>` +
+      `<span class="scr-rs ${rs >= 0 ? 'pos' : 'neg'}">${rs >= 0 ? '+' : ''}${rs.toFixed(0)}%</span>` +
+      `</div>` +
+      `<div class="scr-detail"><div class="scr-bullets">${bullets}</div></div>`
+    );
   }
 
   // ---- signals (multi-timeframe technical read) ----------------------------
@@ -3696,6 +4048,17 @@ body {
       state._sigSymbol = null;
       runAnalysis();
     });
+    $('#tabScreener').addEventListener('click', () => {
+      state.view = 'screener';
+      syncTabs();
+      renderWatchlist();
+      save();
+    });
+    $('#wlAddBtn').addEventListener('click', () => addWatch($('#wlInput').value));
+    $('#wlInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') addWatch($('#wlInput').value);
+    });
+    $('#runScreenerBtn').addEventListener('click', runScreener);
 
     $('#prevBtn').addEventListener('click', () => go(-1));
     $('#nextBtn').addEventListener('click', () => go(1));

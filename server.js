@@ -402,8 +402,8 @@ function providersFor(interval) {
   }
   return list;
 }
-async function loadChart(symbol, range, interval) {
-  const key = `${symbol}|${range}|${interval}`;
+async function loadChart(symbol, range, interval, noQuote) {
+  const key = `${symbol}|${range}|${interval}|${noQuote ? 'nq' : 'q'}`;
   const hit = cacheGet(key);
   if (hit) return { data: hit, errors: [], cached: true };
   const errors = [];
@@ -413,7 +413,8 @@ async function loadChart(symbol, range, interval) {
       if (errors.length) data.note = 'Primary source busy; served by ' + data.source + '.';
       // Daily sources (Nasdaq/Stooq) only have completed bars — enrich with a
       // live quote so the header shows the CURRENT price, not yesterday's close.
-      if (data.regularMarketPrice == null || data.previousClose == null) {
+      // (Skipped for bulk screener requests via noQuote to halve provider calls.)
+      if (!noQuote && (data.regularMarketPrice == null || data.previousClose == null)) {
         const qd = await getQuote(symbol);
         if (qd) {
           if (data.regularMarketPrice == null && isFinite(qd.price)) data.regularMarketPrice = qd.price;
@@ -491,8 +492,9 @@ async function handleChart(res, query) {
   let interval = (query.get('interval') || '1d').trim();
   if (!RANGES.has(range)) range = '1y';
   if (!INTERVALS.has(interval)) interval = '1d';
+  const noQuote = query.get('noquote') === '1';
   try {
-    let { data } = await loadChart(symbol, range, interval);
+    let { data } = await loadChart(symbol, range, interval, noQuote);
     if (query.get('adjusted') === '1') data = applyAdjustment(data);
     return sendJSON(res, data);
   } catch (err) {

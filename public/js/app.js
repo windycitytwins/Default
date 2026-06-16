@@ -29,13 +29,15 @@
 
   let chart;
   const C = { ma20: '#46b3ff', ma50: '#ffb020', ma200: '#e36bf0', ema: '#5be0c0' };
+  const DEFAULT_WATCHLIST = ['NVDA', 'AAPL', 'MSFT', 'META', 'AMZN', 'GOOGL', 'AMD', 'AVGO', 'TSLA', 'NFLX', 'PLTR', 'COIN', 'MSTR', 'SMCI', 'CRM', 'UBER', 'CIFR', 'QQQ', 'SPY'];
+  state.watchlist = DEFAULT_WATCHLIST.slice();
 
   // ---- persistence ---------------------------------------------------------
   function save() {
     try {
       localStorage.setItem(
         LS_KEY,
-        JSON.stringify({ symbol: state.symbol, lessonIdx: state.lessonIdx, stepIdx: state.stepIdx, view: state.view })
+        JSON.stringify({ symbol: state.symbol, lessonIdx: state.lessonIdx, stepIdx: state.stepIdx, view: state.view, watchlist: state.watchlist })
       );
     } catch (_) {}
   }
@@ -46,6 +48,7 @@
       if (Number.isInteger(s.lessonIdx)) state.lessonIdx = s.lessonIdx;
       if (Number.isInteger(s.stepIdx)) state.stepIdx = s.stepIdx;
       if (s.view) state.view = s.view;
+      if (Array.isArray(s.watchlist) && s.watchlist.length) state.watchlist = s.watchlist;
     } catch (_) {}
   }
 
@@ -53,6 +56,7 @@
   function renderCurrentView() {
     if (state.view === 'lessons') renderStep();
     else if (state.view === 'signals') prepSignals();
+    else if (state.view === 'screener') renderWatchlist();
     else applyExplore();
   }
 
@@ -426,9 +430,124 @@
     $('#tabLessons').classList.toggle('active', state.view === 'lessons');
     $('#tabExplore').classList.toggle('active', state.view === 'explore');
     $('#tabSignals').classList.toggle('active', state.view === 'signals');
+    $('#tabScreener').classList.toggle('active', state.view === 'screener');
     $('#lessonsView').style.display = state.view === 'lessons' ? 'flex' : 'none';
     $('#exploreView').style.display = state.view === 'explore' ? 'block' : 'none';
     $('#signalsView').style.display = state.view === 'signals' ? 'flex' : 'none';
+    $('#screenerView').style.display = state.view === 'screener' ? 'flex' : 'none';
+  }
+
+  // ---- screener (swing-trade watchlist ranker) -----------------------------
+  let screening = false;
+  function renderWatchlist() {
+    const box = $('#wlChips');
+    box.innerHTML = '';
+    state.watchlist.forEach((sym) => {
+      const chip = el('span', 'wl-chip', `${sym}<button class="wl-x" data-sym="${sym}" aria-label="remove">×</button>`);
+      chip.querySelector('.wl-x').addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.watchlist = state.watchlist.filter((s) => s !== sym);
+        renderWatchlist();
+        save();
+      });
+      chip.addEventListener('click', () => loadSymbol(sym));
+      box.appendChild(chip);
+    });
+  }
+  function addWatch(sym) {
+    sym = (sym || '').toUpperCase().trim().slice(0, 12);
+    if (!sym || state.watchlist.includes(sym)) return;
+    state.watchlist.push(sym);
+    $('#wlInput').value = '';
+    renderWatchlist();
+    save();
+  }
+  // concurrency-limited async map
+  async function mapPool(items, limit, fn, onProgress) {
+    const out = new Array(items.length);
+    let idx = 0;
+    let done = 0;
+    const worker = async () => {
+      while (idx < items.length) {
+        const i = idx++;
+        try {
+          out[i] = await fn(items[i]);
+        } catch (_) {
+          out[i] = null;
+        }
+        done++;
+        if (onProgress) onProgress(done, items.length);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return out;
+  }
+  async function runScreener() {
+    if (screening) return;
+    screening = true;
+    const box = $('#screenerResult');
+    const isFile = location.protocol === 'file:';
+    const fetchBars = (sym) =>
+      isFile
+        ? Promise.resolve(window.MarketData.loadDemo(sym, '1y', '1d'))
+        : window.MarketData.load(sym, '1y', '1d', { quote: false });
+    box.innerHTML = '<div class="sig-loading">Fetching market (SPY)…</div>';
+    let market = { ret21: 0, ret63: 0 };
+    try {
+      const spy = await fetchBars('SPY');
+      market = window.Screener.marketContext(spy.candles);
+    } catch (_) {}
+    const list = state.watchlist.slice();
+    box.innerHTML = `<div class="sig-loading">Scoring 0/${list.length}…</div>`;
+    const datas = await mapPool(list, 4, fetchBars, (done, total) => {
+      box.innerHTML = `<div class="sig-loading">Scoring ${done}/${total}…</div>`;
+    });
+    const rows = [];
+    list.forEach((sym, i) => {
+      const d = datas[i];
+      if (!d || !Array.isArray(d.candles) || d.candles.length < 60) return;
+      const r = window.Screener.score(d.candles, market);
+      if (r) rows.push({ sym, ...r, synthetic: d.synthetic });
+    });
+    rows.sort((a, b) => b.score - a.score);
+    renderScreener(box, rows, isFile);
+    screening = false;
+  }
+  function scoreClass(s) {
+    return s >= 70 ? 'sb' : s >= 55 ? 'b' : s >= 40 ? 'n' : s >= 25 ? 's' : 'ss';
+  }
+  function renderScreener(box, rows, synthetic) {
+    if (!rows.length) {
+      box.innerHTML = '<div class="sig-error">Couldn’t score any names — check tickers / connection and run again.</div>';
+      return;
+    }
+    const head =
+      (synthetic ? '<div class="sig-sample">⚠ Sample data — start the live server for a real screen.</div>' : '') +
+      '<div class="scr-head"><span>#</span><span>Symbol</span><span>Score</span><span>Setup</span><span>RS</span></div>';
+    box.innerHTML = head + rows.map((r, i) => rowHtml(r, i)).join('');
+    box.querySelectorAll('.scr-row').forEach((rowEl) => {
+      rowEl.addEventListener('click', () => {
+        const sym = rowEl.dataset.sym;
+        loadSymbol(sym);
+        const det = rowEl.nextElementSibling;
+        if (det && det.classList.contains('scr-detail')) det.classList.toggle('open');
+      });
+    });
+  }
+  function rowHtml(r, i) {
+    const cls = scoreClass(r.score);
+    const rs = r.metrics.rs63;
+    const bullets = r.bullets.map((b) => `<div class="scr-b ${b.good ? 'g' : 'x'}"><span>${b.good ? '▲' : '·'}</span>${b.txt}</div>`).join('');
+    return (
+      `<div class="scr-row" data-sym="${r.sym}">` +
+      `<span class="scr-rank">${i + 1}</span>` +
+      `<span class="scr-sym">${r.sym}<small>${r.metrics.chgPct >= 0 ? '+' : ''}${r.metrics.chgPct.toFixed(1)}%</small></span>` +
+      `<span class="rating ${cls} scr-score">${r.score}</span>` +
+      `<span class="scr-setup ${r.breaking ? 'bad' : ''}">${r.setup}</span>` +
+      `<span class="scr-rs ${rs >= 0 ? 'pos' : 'neg'}">${rs >= 0 ? '+' : ''}${rs.toFixed(0)}%</span>` +
+      `</div>` +
+      `<div class="scr-detail"><div class="scr-bullets">${bullets}</div></div>`
+    );
   }
 
   // ---- signals (multi-timeframe technical read) ----------------------------
@@ -538,6 +657,17 @@
       state._sigSymbol = null;
       runAnalysis();
     });
+    $('#tabScreener').addEventListener('click', () => {
+      state.view = 'screener';
+      syncTabs();
+      renderWatchlist();
+      save();
+    });
+    $('#wlAddBtn').addEventListener('click', () => addWatch($('#wlInput').value));
+    $('#wlInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') addWatch($('#wlInput').value);
+    });
+    $('#runScreenerBtn').addEventListener('click', runScreener);
 
     $('#prevBtn').addEventListener('click', () => go(-1));
     $('#nextBtn').addEventListener('click', () => go(1));

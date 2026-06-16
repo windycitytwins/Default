@@ -85,9 +85,10 @@
 
     <aside class="tutor-pane">
       <div class="tabs">
-        <button id="tabLessons" class="tab active">📚 Lessons</button>
+        <button id="tabLessons" class="tab">📚 Lessons</button>
         <button id="tabExplore" class="tab">🔬 Explore</button>
         <button id="tabSignals" class="tab">🧭 Signals</button>
+        <button id="tabScreener" class="tab">🔎 Screener</button>
       </div>
 
       <!-- LESSONS -->
@@ -183,6 +184,26 @@
           certainties, and are just one input a real investor weighs alongside fundamentals,
           valuation, the company's business, and risk management. Not financial advice.</p>
       </div>
+
+      <!-- SCREENER -->
+      <div id="screenerView" class="tutor-view" style="display:none">
+        <p class="explore-intro">A swing-trade screener for your watchlist — ranked by a
+          9/21-EMA &amp; SMA-stack method with relative strength, constructive-pullback and
+          breakdown detection. <b>Educational, not advice.</b></p>
+        <div class="control-group">
+          <h3>Watchlist</h3>
+          <div class="wl-add">
+            <input id="wlInput" type="text" maxlength="12" placeholder="Add ticker…" spellcheck="false" />
+            <button id="wlAddBtn" class="btn-ghost">Add</button>
+          </div>
+          <div id="wlChips" class="wl-chips"></div>
+        </div>
+        <button id="runScreenerBtn" class="btn-primary wide">Run screener</button>
+        <div id="screenerResult" class="screener-result"></div>
+        <p class="disclaimer">Educational only. A free/keyless feed can't see dark-pool prints or
+          options flow, and this isn't a whole-market scan — it ranks your watchlist on chart
+          structure. Not financial advice.</p>
+      </div>
     </aside>
   </main>
 
@@ -191,6 +212,7 @@
   <script src="js/chart.js"></script>
   <script src="js/lessons.js"></script>
   <script src="js/analysis.js"></script>
+  <script src="js/screener.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

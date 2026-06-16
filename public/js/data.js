@@ -106,6 +106,7 @@
   async function load(symbol, range = '1y', interval = '1d', opts = {}) {
     const params = new URLSearchParams({ symbol, range, interval });
     if (opts.adjusted) params.set('adjusted', '1');
+    if (opts.quote === false) params.set('noquote', '1');
     let res, json;
     try {
       res = await fetch('/api/chart?' + params.toString(), { headers: { Accept: 'application/json' } });
