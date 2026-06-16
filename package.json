@@ -1,0 +1,22 @@
+{
+  "name": "chart-school",
+  "version": "1.0.0",
+  "description": "An interactive tutor that teaches you how to read stock charts using live market data.",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "stocks",
+    "charts",
+    "technical-analysis",
+    "education",
+    "tutor"
+  ],
+  "license": "MIT"
+}
