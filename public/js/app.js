@@ -411,15 +411,16 @@
       chart.setEmaBand('ema921', {
         fast: ta.ema(closes, 9), slow: ta.ema(closes, 21),
         up: 'rgba(38,161,123,0.16)', down: 'rgba(224,86,106,0.16)',
-        fastColor: 'rgba(120,230,170,0.95)', slowColor: 'rgba(120,170,255,0.95)'
+        fastColor: 'rgba(120,230,170,0.95)', slowColor: 'rgba(120,170,255,0.95)',
+        legend: [{ period: 9, color: '#78e6aa' }, { period: 21, color: '#8ab4ff' }]
       });
-    if (ex.ema9) chart.setOverlay('ema9', { data: ta.ema(closes, 9), color: '#2ec27e', label: 'EMA 9', dash: [5, 4] });
-    if (ex.ema21) chart.setOverlay('ema21', { data: ta.ema(closes, 21), color: '#46b3ff', label: 'EMA 21', dash: [5, 4] });
-    if (ex.ema50) chart.setOverlay('ema50', { data: ta.ema(closes, 50), color: '#b083ff', label: 'EMA 50', width: 1.6 });
-    if (ex.ma20) chart.setOverlay('ma20', { data: ta.sma(closes, 20), color: '#9be36b', label: 'SMA 20' });
-    if (ex.ma50) chart.setOverlay('ma50', { data: ta.sma(closes, 50), color: '#5b8cff', label: 'SMA 50' });
-    if (ex.ma100 && closes.length > 100) chart.setOverlay('ma100', { data: ta.sma(closes, 100), color: '#ffb020', label: 'SMA 100' });
-    if (ex.ma200 && closes.length > 200) chart.setOverlay('ma200', { data: ta.sma(closes, 200), color: '#e0566a', label: 'SMA 200' });
+    if (ex.ema9) chart.setOverlay('ema9', { data: ta.ema(closes, 9), color: '#2ec27e', label: 'EMA 9', dash: [5, 4], group: 'EMA', period: 9 });
+    if (ex.ema21) chart.setOverlay('ema21', { data: ta.ema(closes, 21), color: '#46b3ff', label: 'EMA 21', dash: [5, 4], group: 'EMA', period: 21 });
+    if (ex.ema50) chart.setOverlay('ema50', { data: ta.ema(closes, 50), color: '#b083ff', label: 'EMA 50', width: 1.6, group: 'EMA', period: 50 });
+    if (ex.ma20) chart.setOverlay('ma20', { data: ta.sma(closes, 20), color: '#9be36b', label: 'SMA 20', group: 'SMA', period: 20 });
+    if (ex.ma50) chart.setOverlay('ma50', { data: ta.sma(closes, 50), color: '#5b8cff', label: 'SMA 50', group: 'SMA', period: 50 });
+    if (ex.ma100 && closes.length > 100) chart.setOverlay('ma100', { data: ta.sma(closes, 100), color: '#ffb020', label: 'SMA 100', group: 'SMA', period: 100 });
+    if (ex.ma200 && closes.length > 200) chart.setOverlay('ma200', { data: ta.sma(closes, 200), color: '#e0566a', label: 'SMA 200', group: 'SMA', period: 200 });
     if (ex.bb) {
       const b = ta.bollinger(closes, 20, 2);
       chart.setBand('bb', { upper: b.upper, lower: b.lower, mid: b.mid, color: 'rgba(120,160,255,0.07)', lineColor: 'rgba(150,180,255,0.6)' });

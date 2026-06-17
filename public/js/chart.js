@@ -408,6 +408,7 @@
       this._drawTimeAxis(L);
       this._drawCrosshair(L, yOf);
       this._drawLastPrice(L, yOf);
+      this._drawLegend(L);
     }
 
     _drawEmaBands(L, yOf) {
@@ -1040,55 +1041,96 @@
         ctx.textAlign = 'left';
         ctx.fillText(tag, L.price.x + L.price.w + 5, this.hover.y + 4);
       }
-      this._drawTooltip(L, i, c, x);
+      // date tag on the time axis (OHLCV now lives in the top-left legend)
+      const dtag = fmtDate(c.time, true);
+      ctx.font = '11px system-ui, sans-serif';
+      const dw = ctx.measureText(dtag).width + 12;
+      let dx = Math.max(L.price.x, Math.min(x - dw / 2, L.price.x + L.price.w - dw));
+      const dy = L.price.y + L.price.h + (L.vol ? L.vol.h + 8 : 0) + (L.rsi ? L.rsi.h + 8 : 0) + (L.macd ? L.macd.h + 8 : 0) + 4;
+      ctx.fillStyle = '#2a3550';
+      ctx.fillRect(dx, dy, dw, 16);
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'left';
+      ctx.fillText(dtag, dx + 6, dy + 12);
     }
 
-    _drawTooltip(L, i, c, x) {
+    _drawLegend(L) {
       const ctx = this.ctx;
-      const up = c.close >= c.open;
-      const chg = i > 0 ? c.close - this.candles[i - 1].close : 0;
-      const chgPct = i > 0 ? (chg / this.candles[i - 1].close) * 100 : 0;
-      const rows = [
-        [fmtDate(c.time, true), ''],
-        ['O', fmtPrice(c.open)],
-        ['H', fmtPrice(c.high)],
-        ['L', fmtPrice(c.low)],
-        ['C', fmtPrice(c.close)],
-        ['Vol', fmtVol(c.volume)],
-        ['Chg', `${chg >= 0 ? '+' : ''}${fmtPrice(chg)} (${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%)`]
-      ];
-      // include overlay values
-      for (const [id, ov] of this.overlays) {
-        const v = ov.data[i];
-        if (v != null) rows.push([ov.label || id, fmtPrice(v), ov.color]);
+      if (!this.candles.length) return;
+      const m = this.meta || {};
+      let i = this.hover && this.hover.index != null ? this.hover.index : this.candles.length - 1;
+      i = Math.max(0, Math.min(this.candles.length - 1, i));
+      const c = this.candles[i];
+      if (!c) return;
+      const dim = this.theme.axis;
+      const txt = this.theme.text;
+      const valCol = c.close >= c.open ? this.theme.up : this.theme.down;
+      const prevC = i > 0 ? this.candles[i - 1].close : c.open;
+      const chg = c.close - prevC;
+      const chgPct = prevC ? (chg / prevC) * 100 : 0;
+      const chgCol = chg >= 0 ? this.theme.up : this.theme.down;
+
+      const lines = [];
+      const head = [];
+      if (m.symbol) head.push({ t: m.symbol, c: txt, bold: true, size: 13 });
+      const meta2 = [m.interval, m.exchange].filter(Boolean).join(' · ');
+      if (meta2) head.push({ t: '· ' + meta2, c: dim });
+      if (m.synthetic) head.push({ t: '· SAMPLE', c: this.theme.down });
+      lines.push(head);
+      lines.push([
+        { t: 'O', c: dim }, { t: fmtPrice(c.open), c: valCol },
+        { t: 'H', c: dim }, { t: fmtPrice(c.high), c: valCol },
+        { t: 'L', c: dim }, { t: fmtPrice(c.low), c: valCol },
+        { t: 'C', c: dim }, { t: fmtPrice(c.close), c: valCol },
+        { t: `${chg >= 0 ? '+' : ''}${fmtPrice(chg)} (${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%)`, c: chgCol },
+        { t: 'Vol', c: dim }, { t: fmtVol(c.volume), c: txt }
+      ]);
+
+      const groups = {};
+      const ungrouped = [];
+      for (const [, ov] of this.overlays) {
+        if (ov.group) (groups[ov.group] = groups[ov.group] || []).push({ period: ov.period, color: ov.color, v: ov.data[i] });
+        else ungrouped.push({ label: ov.label, color: ov.color, v: ov.data[i] });
       }
-      ctx.font = '11px system-ui, sans-serif';
-      let w = 0;
-      rows.forEach((r) => {
-        w = Math.max(w, ctx.measureText(r[0]).width + ctx.measureText(r[1]).width);
-      });
-      const boxW = w + 34;
-      const boxH = rows.length * 15 + 10;
-      let bx = x + 14;
-      if (bx + boxW > L.price.x + L.price.w) bx = x - boxW - 14;
-      bx = Math.max(L.price.x + 2, bx);
-      const by = L.price.y + 6;
-      ctx.fillStyle = 'rgba(16,21,33,0.94)';
-      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-      this._roundRect(bx, by, boxW, boxH, 6);
-      ctx.fill();
-      ctx.stroke();
-      rows.forEach((r, idx) => {
-        const ry = by + 16 + idx * 15;
-        ctx.textAlign = 'left';
-        ctx.fillStyle = r[2] || (idx === 0 ? '#aeb8cc' : '#8a93a6');
-        ctx.font = idx === 0 ? 'bold 11px system-ui' : '11px system-ui';
-        ctx.fillText(r[0], bx + 9, ry);
-        ctx.textAlign = 'right';
-        ctx.fillStyle = idx === 0 ? '#aeb8cc' : up && idx >= 1 ? '#dfe6f2' : '#dfe6f2';
-        if (r[2]) ctx.fillStyle = r[2];
-        ctx.fillText(r[1], bx + boxW - 9, ry);
-      });
+      for (const [, b] of this.emaBands) {
+        if (!b.legend) continue;
+        groups.EMA = groups.EMA || [];
+        groups.EMA.push({ period: b.legend[0].period, color: b.legend[0].color, v: b.fast[i] });
+        groups.EMA.push({ period: b.legend[1].period, color: b.legend[1].color, v: b.slow[i] });
+      }
+      const groupLine = (name, arr) => {
+        arr.sort((a, b) => a.period - b.period);
+        const seen = new Set();
+        const items = [];
+        for (const x of arr) {
+          if (seen.has(x.period)) continue;
+          seen.add(x.period);
+          items.push(x);
+        }
+        const segs = [{ t: `${name} ${items.map((x) => x.period).join('/')}`, c: dim }];
+        for (const x of items) segs.push({ t: x.v != null ? fmtPrice(x.v) : '—', c: x.color });
+        return segs;
+      };
+      if (groups.EMA) lines.push(groupLine('EMA', groups.EMA));
+      if (groups.SMA) lines.push(groupLine('SMA', groups.SMA));
+      for (const u of ungrouped) lines.push([{ t: u.label, c: u.color }, { t: u.v != null ? fmtPrice(u.v) : '—', c: u.color }]);
+      for (const [, bb] of this.bands) {
+        if (bb.upper && bb.upper[i] != null) lines.push([{ t: 'BB 20,2', c: dim }, { t: fmtPrice(bb.upper[i]), c: bb.lineColor || dim }, { t: fmtPrice(bb.mid[i]), c: bb.lineColor || dim }, { t: fmtPrice(bb.lower[i]), c: bb.lineColor || dim }]);
+      }
+
+      let y = L.price.y + 13;
+      const x0 = L.price.x + 8;
+      for (const line of lines) {
+        let x = x0;
+        for (const seg of line) {
+          ctx.font = (seg.bold ? 'bold ' : '') + (seg.size || 11) + 'px system-ui, sans-serif';
+          ctx.fillStyle = seg.c;
+          ctx.textAlign = 'left';
+          ctx.fillText(seg.t, x, y);
+          x += ctx.measureText(seg.t).width + 6;
+        }
+        y += 15;
+      }
     }
 
     // ---- events ------------------------------------------------------------
