@@ -23,7 +23,11 @@ moving averages, volume, and RSI.
   7. 🎯 **Putting It Together** — reading with confluence + a final check
 - **An Explore sandbox** — toggle any indicator on any symbol and practise.
 - **A Signals tab** — an educational multi-timeframe technical read (Strong Sell →
-  Strong Buy) with a full factor-by-factor breakdown.
+  Strong Buy) with a full factor-by-factor breakdown, plus a swing-trader
+  **trade plan** (entry zone, structure/ATR stop, resistance targets, R:R) drawn
+  on the chart.
+- **Charts default to a full MA suite** — the EMA 9/21 trend ribbon + EMA 50 and
+  the SMA 20/50/100/200, on by default (toggle in Explore).
 - **A Screener tab** — ranks an editable watchlist as swing-trade candidates using
   a 9/21-EMA & SMA-stack method with relative strength vs the market,
   constructive-pullback detection and breakdown ("exit") flags. *Educational, not

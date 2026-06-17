@@ -481,6 +481,24 @@ body {
 .scr-b.g span { color: #2ad19b; }
 .scr-b.x span { color: #6b7488; }
 
+/* ---------- trade plan ---------- */
+.tp-card { border: 1px solid rgba(38,161,123,0.4); border-radius: 12px; padding: 13px; background: var(--panel-2); }
+.tp-card.neutral { border-color: var(--border); }
+.tp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.tp-head span:first-child { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+.tp-head small { text-transform: none; letter-spacing: 0; }
+.tp-setup { font-size: 13px; color: #d2d9e8; margin-bottom: 8px; }
+.tp-levels { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 9px; overflow: hidden; margin-bottom: 10px; }
+.tp-lvl { display: flex; justify-content: space-between; gap: 8px; padding: 8px 11px; background: #0e1424; font-size: 12.5px; }
+.tp-lvl span { color: var(--muted); }
+.tp-lvl b { font-variant-numeric: tabular-nums; }
+.tp-lvl.entry b { color: #66ecb6; }
+.tp-lvl.stop b { color: #ff8090; }
+.tp-lvl.t1 b, .tp-lvl.t2 b { color: #8fb4ff; }
+.tp-lvl.rr.g b { color: #66ecb6; }
+.tp-lvl.rr.x b { color: #ff8090; }
+.tp-notes { font-size: 11.5px; color: #9aa3b5; line-height: 1.5; display: flex; flex-direction: column; gap: 3px; }
+
 /* scrollbars */
 .tutor-view::-webkit-scrollbar { width: 9px; }
 .tutor-view::-webkit-scrollbar-thumb { background: #28324c; border-radius: 999px; }
@@ -621,13 +639,15 @@ body {
         </div>
 
         <div class="control-group">
-          <h3>Moving averages</h3>
-          <label class="switch"><input type="checkbox" data-toggle="ema9" /><span><i class="dot" style="background:#9be36b"></i>EMA 9</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ma20" /><span><i class="dot" style="background:#46b3ff"></i>SMA 20</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ema21" /><span><i class="dot" style="background:#5be0c0"></i>EMA 21</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ma50" /><span><i class="dot" style="background:#ffb020"></i>SMA 50</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ma100" /><span><i class="dot" style="background:#ff8f5e"></i>SMA 100</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ma200" /><span><i class="dot" style="background:#e36bf0"></i>SMA 200</span></label>
+          <h3>Moving averages <small>(on by default)</small></h3>
+          <label class="switch"><input type="checkbox" data-toggle="emaband" checked /><span><i class="dot" style="background:linear-gradient(90deg,#2ec27e,#46b3ff)"></i>EMA 9/21 ribbon</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="ema9" /><span><i class="dot" style="background:#2ec27e"></i>EMA 9 line</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="ema21" /><span><i class="dot" style="background:#46b3ff"></i>EMA 21 line</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="ema50" checked /><span><i class="dot" style="background:#b083ff"></i>EMA 50</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="ma20" checked /><span><i class="dot" style="background:#9be36b"></i>SMA 20</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="ma50" checked /><span><i class="dot" style="background:#5b8cff"></i>SMA 50</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="ma100" checked /><span><i class="dot" style="background:#ffb020"></i>SMA 100</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="ma200" checked /><span><i class="dot" style="background:#e0566a"></i>SMA 200</span></label>
         </div>
 
         <div class="control-group">
@@ -1350,6 +1370,7 @@ body {
 
       this.overlays = new Map(); // id -> {data:[null|num], color, width, label, dash}
       this.bands = new Map(); // id -> {upper:[], lower:[], color, lineColor, label}
+      this.emaBands = new Map(); // id -> {fast:[], slow:[], up, down} trend-coloured ribbon
       this.hlines = new Map(); // id -> {price, color, label, dash}
       this.zones = new Map(); // id -> {lo, hi, color, label}
       this.markers = []; // {index, side, color, text, shape}
@@ -1431,6 +1452,14 @@ body {
       this.bands.clear();
       this.requestRender();
     }
+    setEmaBand(id, cfg) {
+      this.emaBands.set(id, cfg);
+      this.requestRender();
+    }
+    clearEmaBands() {
+      this.emaBands.clear();
+      this.requestRender();
+    }
     setHLine(id, cfg) {
       this.hlines.set(id, cfg);
       this.requestRender();
@@ -1441,6 +1470,10 @@ body {
     }
     setZone(id, cfg) {
       this.zones.set(id, cfg);
+      this.requestRender();
+    }
+    removeZone(id) {
+      this.zones.delete(id);
       this.requestRender();
     }
     clearZones() {
@@ -1475,6 +1508,7 @@ body {
     clearTeaching() {
       this.overlays.clear();
       this.bands.clear();
+      this.emaBands.clear();
       this.hlines.clear();
       this.zones.clear();
       this.markers = [];
@@ -1592,6 +1626,15 @@ body {
           if (b.lower[i] != null && b.lower[i] < min) min = b.lower[i];
         }
       }
+      for (const b of this.emaBands.values()) {
+        for (let i = s; i < e; i++) {
+          for (const v of [b.fast[i], b.slow[i]]) {
+            if (v == null) continue;
+            if (v > max) max = v;
+            if (v < min) min = v;
+          }
+        }
+      }
       // keep the live-price line on-screen
       if (this.livePrice != null) {
         if (this.livePrice < min) min = this.livePrice;
@@ -1653,6 +1696,7 @@ body {
       this._drawGrid(L, scale, yOf);
       this._drawZones(L, yOf);
       this._drawHighlights(L);
+      this._drawEmaBands(L, yOf);
       this._drawBands(L, yOf);
       if (this.mode === 'candles') this._drawCandles(L, yOf);
       else this._drawLine(L, yOf);
@@ -1667,6 +1711,58 @@ body {
       this._drawTimeAxis(L);
       this._drawCrosshair(L, yOf);
       this._drawLastPrice(L, yOf);
+    }
+
+    _drawEmaBands(L, yOf) {
+      const ctx = this.ctx;
+      const { s, e } = this._visible();
+      for (const [, b] of this.emaBands) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(L.price.x, L.price.y, L.price.w, L.price.h);
+        ctx.clip();
+        // trend-coloured fill between fast & slow, segment by segment
+        for (let i = s; i < e - 1; i++) {
+          const f0 = b.fast[i];
+          const s0 = b.slow[i];
+          const f1 = b.fast[i + 1];
+          const s1 = b.slow[i + 1];
+          if (f0 == null || s0 == null || f1 == null || s1 == null) continue;
+          const x0 = this._xOf(i, L.price);
+          const x1 = this._xOf(i + 1, L.price);
+          ctx.fillStyle = f0 >= s0 ? b.up || 'rgba(38,161,123,0.18)' : b.down || 'rgba(224,86,106,0.18)';
+          ctx.beginPath();
+          ctx.moveTo(x0, yOf(f0));
+          ctx.lineTo(x1, yOf(f1));
+          ctx.lineTo(x1, yOf(s1));
+          ctx.lineTo(x0, yOf(s0));
+          ctx.closePath();
+          ctx.fill();
+        }
+        // the fast & slow edge lines
+        const edge = (arr, color) => {
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.3;
+          ctx.beginPath();
+          let st = false;
+          for (let i = s; i < e; i++) {
+            if (arr[i] == null) {
+              st = false;
+              continue;
+            }
+            const x = this._xOf(i, L.price);
+            const y = yOf(arr[i]);
+            if (!st) {
+              ctx.moveTo(x, y);
+              st = true;
+            } else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        };
+        edge(b.fast, b.fastColor || 'rgba(120,230,170,0.9)');
+        edge(b.slow, b.slowColor || 'rgba(120,170,255,0.9)');
+        ctx.restore();
+      }
     }
 
     _drawBands(L, yOf) {
@@ -3320,7 +3416,93 @@ body {
     return out;
   }
 
-  window.Analysis = { analyze, multiHorizon, ratingFor };
+  /**
+   * A swing-trader trade plan from the (daily) chart: bias, entry zone, a
+   * structure/ATR-based stop, resistance targets and the resulting R:R.
+   * Educational — a framework, not a recommendation.
+   */
+  function tradePlan(candles) {
+    const ta = window.TA;
+    const n = candles ? candles.length : 0;
+    if (!ta || n < 60) return null;
+    const closes = candles.map((c) => c.close);
+    const price = closes[n - 1];
+    const ema9 = ta.ema(closes, 9)[n - 1];
+    const ema21 = ta.ema(closes, 21)[n - 1];
+    const ema50 = ta.ema(closes, 50)[n - 1];
+    const sma200 = ta.sma(closes, 200)[n - 1];
+    const atr = ta.atr(candles, 14)[n - 1] || price * 0.02;
+    const levels = ta.supportResistance(candles, { lookback: 5, maxLevels: 8, minTouches: 2 });
+    const piv = ta.pivots(candles, 4);
+    const recentLows = piv.lows.filter((p) => p.i > n - 40);
+    const swingLow = recentLows.length ? recentLows[recentLows.length - 1].price : price - 2 * atr;
+
+    const bullish = price > ema21 && ema21 >= ema50;
+    const notes = [];
+    if (!bullish) {
+      return {
+        bias: price < ema50 ? 'bearish' : 'neutral',
+        ok: false,
+        setup: price < (sma200 || 0) ? 'No long setup — below the 200-day; stand aside' : 'No clean long setup — wait for price to reclaim the rising EMAs',
+        notes: [
+          'Price is not above a rising EMA 9/21/50 stack — an experienced swing trader waits rather than forcing a long.',
+          'Re-evaluate if it reclaims the EMA 21 and the ribbon turns up.'
+        ]
+      };
+    }
+
+    const extPct = ((price - ema21) / ema21) * 100;
+    let entryLow;
+    let entryHigh;
+    let setup;
+    if (extPct > 8) {
+      setup = 'Buy the pullback to the rising EMA ribbon';
+      entryLow = Math.min(ema21, ema50);
+      entryHigh = ema9;
+      notes.push(`Extended ${extPct.toFixed(0)}% above EMA 21 — wait for a pullback into the ${entryLow.toFixed(2)}–${entryHigh.toFixed(2)} ribbon rather than chasing.`);
+    } else {
+      setup = 'Buy at / near the EMA support zone';
+      entryLow = Math.min(ema21, price) * 0.992;
+      entryHigh = Math.max(ema9, price) * 1.004;
+      notes.push('Price is sitting on the rising EMA ribbon — a constructive entry zone (don’t get shaken out by low-volume dips).');
+    }
+    const entryMid = (entryLow + entryHigh) / 2;
+
+    // stop: below the more relevant of swing low / EMA 50, ATR-buffered, risk-capped
+    let stop = Math.min(swingLow, ema50) - 0.25 * atr;
+    if (entryMid - stop > 2.5 * atr) {
+      stop = entryMid - 2 * atr;
+      notes.push('Structure stop was wide, so the plan caps risk near 2×ATR.');
+    }
+    if (stop >= entryMid) stop = entryMid - 1.5 * atr;
+    const risk = entryMid - stop;
+
+    // a worthwhile first target is at least ~1R above the entry
+    const minT1 = entryMid + Math.max(risk, entryMid * 0.01);
+    const resAbove = levels.filter((l) => l.mid >= minT1).map((l) => l.mid).sort((a, b) => a - b);
+    let t1 = resAbove[0] != null ? resAbove[0] : entryMid + 2 * risk;
+    let t2 = resAbove.find((m) => m > t1 * 1.01);
+    if (t2 == null) t2 = Math.max(t1 + 1.5 * risk, entryMid + 3 * risk);
+    const rr = risk > 0 ? (t1 - entryMid) / risk : 0;
+    notes.push(`Stop below structure at ${stop.toFixed(2)} (the recent swing low / EMA 50). Risk ≈ ${risk.toFixed(2)}/share.`);
+    notes.push(`Targets at overhead resistance: T1 ${t1.toFixed(2)}, T2 ${t2.toFixed(2)} — first target ≈ ${rr.toFixed(1)}R.`);
+    if (rr < 1.5) notes.push('R:R to the first target is below ~1.5 — many swing traders would pass or wait for a better entry.');
+
+    return {
+      bias: 'bullish',
+      ok: true,
+      setup,
+      entry: { low: Math.min(entryLow, entryHigh), high: Math.max(entryLow, entryHigh), mid: entryMid },
+      stop,
+      targets: [t1, t2],
+      risk,
+      rr,
+      atr,
+      notes
+    };
+  }
+
+  window.Analysis = { analyze, multiHorizon, tradePlan, ratingFor };
 })();
 
 </script>
@@ -3606,7 +3788,7 @@ body {
     lessonIdx: 0,
     stepIdx: 0,
     view: 'lessons',
-    explore: { mode: 'candles', ema9: false, ma20: false, ema21: false, ma50: false, ma100: false, ma200: false, bb: false, vwap: false, volume: true, rsi: false, macd: false, sr: false, log: false }
+    explore: { mode: 'candles', emaband: true, ema9: false, ema21: false, ema50: true, ma20: true, ma50: true, ma100: true, ma200: true, bb: false, vwap: false, volume: true, rsi: false, macd: false, sr: false, log: false }
   };
 
   let chart;
@@ -3663,6 +3845,8 @@ body {
       chart.setData(data);
       renderHeader();
       markUpdated(data);
+      // Always show the EMA/SMA suite on the trading chart (lessons set their own).
+      if (state.view !== 'lessons') applyExplore(true);
       renderCurrentView();
     } catch (err) {
       showError(err);
@@ -3678,6 +3862,7 @@ body {
     chart.setData(data);
     renderHeader();
     markUpdated(data);
+    if (state.view !== 'lessons') applyExplore(true);
     renderCurrentView();
   }
 
@@ -3985,12 +4170,20 @@ body {
     if (!keepView) chart.resetView();
     const candles = state.data.candles;
     const closes = candles.map((c) => c.close);
-    if (ex.ema9) chart.setOverlay('ema9', { data: ta.ema(closes, 9), color: '#9be36b', label: 'EMA 9', dash: [5, 4] });
-    if (ex.ma20) chart.setOverlay('ma20', { data: ta.sma(closes, 20), color: C.ma20, label: 'SMA 20' });
-    if (ex.ema21) chart.setOverlay('ema21', { data: ta.ema(closes, 21), color: C.ema, label: 'EMA 21', dash: [5, 4] });
-    if (ex.ma50) chart.setOverlay('ma50', { data: ta.sma(closes, 50), color: C.ma50, label: 'SMA 50' });
-    if (ex.ma100 && closes.length > 100) chart.setOverlay('ma100', { data: ta.sma(closes, 100), color: '#ff8f5e', label: 'SMA 100' });
-    if (ex.ma200 && closes.length > 200) chart.setOverlay('ma200', { data: ta.sma(closes, 200), color: C.ma200, label: 'SMA 200' });
+    // EMA 9/21 trend-coloured ribbon (drawn under the lines)
+    if (ex.emaband)
+      chart.setEmaBand('ema921', {
+        fast: ta.ema(closes, 9), slow: ta.ema(closes, 21),
+        up: 'rgba(38,161,123,0.16)', down: 'rgba(224,86,106,0.16)',
+        fastColor: 'rgba(120,230,170,0.95)', slowColor: 'rgba(120,170,255,0.95)'
+      });
+    if (ex.ema9) chart.setOverlay('ema9', { data: ta.ema(closes, 9), color: '#2ec27e', label: 'EMA 9', dash: [5, 4] });
+    if (ex.ema21) chart.setOverlay('ema21', { data: ta.ema(closes, 21), color: '#46b3ff', label: 'EMA 21', dash: [5, 4] });
+    if (ex.ema50) chart.setOverlay('ema50', { data: ta.ema(closes, 50), color: '#b083ff', label: 'EMA 50', width: 1.6 });
+    if (ex.ma20) chart.setOverlay('ma20', { data: ta.sma(closes, 20), color: '#9be36b', label: 'SMA 20' });
+    if (ex.ma50) chart.setOverlay('ma50', { data: ta.sma(closes, 50), color: '#5b8cff', label: 'SMA 50' });
+    if (ex.ma100 && closes.length > 100) chart.setOverlay('ma100', { data: ta.sma(closes, 100), color: '#ffb020', label: 'SMA 100' });
+    if (ex.ma200 && closes.length > 200) chart.setOverlay('ma200', { data: ta.sma(closes, 200), color: '#e0566a', label: 'SMA 200' });
     if (ex.bb) {
       const b = ta.bollinger(closes, 20, 2);
       chart.setBand('bb', { upper: b.upper, lower: b.lower, mid: b.mid, color: 'rgba(120,160,255,0.07)', lineColor: 'rgba(150,180,255,0.6)' });
@@ -4331,13 +4524,48 @@ body {
       .join('');
     return `<div class="sig-card"><div class="sig-card-head"><span class="sig-title">${title} <small>${subtitle}</small></span><span class="rating ${h.rating.cls}">${h.rating.label}</span></div>${sigMeter(h.score)}<div class="sig-factors">${rows}</div></div>`;
   }
-  function renderSignals(box, r, synthetic) {
+  function f2(n) {
+    return n == null ? '—' : Number(n).toFixed(2);
+  }
+  function tradePlanHtml(p) {
+    if (!p) return '';
+    if (!p.ok) {
+      return `<div class="tp-card neutral"><div class="tp-head"><span>Trade plan</span><span class="rating ${p.bias === 'bearish' ? 's' : 'n'}">${p.bias}</span></div><div class="tp-setup">${p.setup}</div><div class="tp-notes">${p.notes.map((n) => `<div>• ${n}</div>`).join('')}</div></div>`;
+    }
+    const rrCls = p.rr >= 2 ? 'g' : p.rr >= 1.5 ? '' : 'x';
+    return (
+      `<div class="tp-card"><div class="tp-head"><span>Trade plan <small>(swing · daily)</small></span><span class="rating b">${p.setup}</span></div>` +
+      `<div class="tp-levels">` +
+      `<div class="tp-lvl entry"><span>Entry</span><b>${f2(p.entry.low)}–${f2(p.entry.high)}</b></div>` +
+      `<div class="tp-lvl stop"><span>Stop</span><b>${f2(p.stop)}</b></div>` +
+      `<div class="tp-lvl t1"><span>Target 1</span><b>${f2(p.targets[0])}</b></div>` +
+      `<div class="tp-lvl t2"><span>Target 2</span><b>${f2(p.targets[1])}</b></div>` +
+      `<div class="tp-lvl rr ${rrCls}"><span>R : R (T1)</span><b>${p.rr.toFixed(1)} : 1</b></div>` +
+      `</div>` +
+      `<div class="tp-notes">${p.notes.map((n) => `<div>• ${n}</div>`).join('')}</div></div>`
+    );
+  }
+  function drawTradePlan(p) {
+    ['tpStop', 'tpT1', 'tpT2'].forEach((id) => chart.removeHLine(id));
+    chart.removeZone('tpEntry');
+    if (!p || !p.ok) {
+      chart.requestRender();
+      return;
+    }
+    chart.setZone('tpEntry', { lo: p.entry.low, hi: p.entry.high, color: 'rgba(38,161,123,0.18)', label: 'Entry', labelColor: 'rgba(120,230,190,0.95)' });
+    chart.setHLine('tpStop', { price: p.stop, color: '#e0566a', label: 'Stop', dash: [6, 4] });
+    chart.setHLine('tpT1', { price: p.targets[0], color: '#5b8cff', label: 'T1', dash: [6, 4] });
+    chart.setHLine('tpT2', { price: p.targets[1], color: '#46b3ff', label: 'T2', dash: [2, 4] });
+  }
+  function renderSignals(box, r, plan, synthetic) {
     box.innerHTML =
       (synthetic ? '<div class="sig-sample">⚠ Sample data — start the live server for a real read.</div>' : '') +
+      tradePlanHtml(plan) +
       `<div class="sig-overall ${r.overall.rating.cls}"><div class="sig-overall-top"><span>Overall technical read</span><span class="rating ${r.overall.rating.cls} big">${r.overall.rating.label}</span></div>${sigMeter(r.overall.score)}<div class="sig-align">${r.alignment}</div></div>` +
       sigCard(r.longTerm, 'Long-term', 'weekly · 5y') +
       sigCard(r.swing, 'Multi-month', 'daily · 1y') +
       sigCard(r.intraday, 'Intraday', 'today · 2-min');
+    drawTradePlan(plan);
   }
   async function runAnalysis() {
     if (analyzing) return;
@@ -4366,7 +4594,8 @@ body {
     }
     const firstOk = res.find((x) => x.status === 'fulfilled');
     const synthetic = isFile || (firstOk && firstOk.value && firstOk.value.synthetic);
-    renderSignals(box, window.Analysis.multiHorizon(sets), synthetic);
+    const plan = sets.swing ? window.Analysis.tradePlan(sets.swing) : null;
+    renderSignals(box, window.Analysis.multiHorizon(sets), plan, synthetic);
     analyzing = false;
   }
 

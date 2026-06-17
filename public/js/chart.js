@@ -67,6 +67,7 @@
 
       this.overlays = new Map(); // id -> {data:[null|num], color, width, label, dash}
       this.bands = new Map(); // id -> {upper:[], lower:[], color, lineColor, label}
+      this.emaBands = new Map(); // id -> {fast:[], slow:[], up, down} trend-coloured ribbon
       this.hlines = new Map(); // id -> {price, color, label, dash}
       this.zones = new Map(); // id -> {lo, hi, color, label}
       this.markers = []; // {index, side, color, text, shape}
@@ -148,6 +149,14 @@
       this.bands.clear();
       this.requestRender();
     }
+    setEmaBand(id, cfg) {
+      this.emaBands.set(id, cfg);
+      this.requestRender();
+    }
+    clearEmaBands() {
+      this.emaBands.clear();
+      this.requestRender();
+    }
     setHLine(id, cfg) {
       this.hlines.set(id, cfg);
       this.requestRender();
@@ -158,6 +167,10 @@
     }
     setZone(id, cfg) {
       this.zones.set(id, cfg);
+      this.requestRender();
+    }
+    removeZone(id) {
+      this.zones.delete(id);
       this.requestRender();
     }
     clearZones() {
@@ -192,6 +205,7 @@
     clearTeaching() {
       this.overlays.clear();
       this.bands.clear();
+      this.emaBands.clear();
       this.hlines.clear();
       this.zones.clear();
       this.markers = [];
@@ -309,6 +323,15 @@
           if (b.lower[i] != null && b.lower[i] < min) min = b.lower[i];
         }
       }
+      for (const b of this.emaBands.values()) {
+        for (let i = s; i < e; i++) {
+          for (const v of [b.fast[i], b.slow[i]]) {
+            if (v == null) continue;
+            if (v > max) max = v;
+            if (v < min) min = v;
+          }
+        }
+      }
       // keep the live-price line on-screen
       if (this.livePrice != null) {
         if (this.livePrice < min) min = this.livePrice;
@@ -370,6 +393,7 @@
       this._drawGrid(L, scale, yOf);
       this._drawZones(L, yOf);
       this._drawHighlights(L);
+      this._drawEmaBands(L, yOf);
       this._drawBands(L, yOf);
       if (this.mode === 'candles') this._drawCandles(L, yOf);
       else this._drawLine(L, yOf);
@@ -384,6 +408,58 @@
       this._drawTimeAxis(L);
       this._drawCrosshair(L, yOf);
       this._drawLastPrice(L, yOf);
+    }
+
+    _drawEmaBands(L, yOf) {
+      const ctx = this.ctx;
+      const { s, e } = this._visible();
+      for (const [, b] of this.emaBands) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(L.price.x, L.price.y, L.price.w, L.price.h);
+        ctx.clip();
+        // trend-coloured fill between fast & slow, segment by segment
+        for (let i = s; i < e - 1; i++) {
+          const f0 = b.fast[i];
+          const s0 = b.slow[i];
+          const f1 = b.fast[i + 1];
+          const s1 = b.slow[i + 1];
+          if (f0 == null || s0 == null || f1 == null || s1 == null) continue;
+          const x0 = this._xOf(i, L.price);
+          const x1 = this._xOf(i + 1, L.price);
+          ctx.fillStyle = f0 >= s0 ? b.up || 'rgba(38,161,123,0.18)' : b.down || 'rgba(224,86,106,0.18)';
+          ctx.beginPath();
+          ctx.moveTo(x0, yOf(f0));
+          ctx.lineTo(x1, yOf(f1));
+          ctx.lineTo(x1, yOf(s1));
+          ctx.lineTo(x0, yOf(s0));
+          ctx.closePath();
+          ctx.fill();
+        }
+        // the fast & slow edge lines
+        const edge = (arr, color) => {
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.3;
+          ctx.beginPath();
+          let st = false;
+          for (let i = s; i < e; i++) {
+            if (arr[i] == null) {
+              st = false;
+              continue;
+            }
+            const x = this._xOf(i, L.price);
+            const y = yOf(arr[i]);
+            if (!st) {
+              ctx.moveTo(x, y);
+              st = true;
+            } else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        };
+        edge(b.fast, b.fastColor || 'rgba(120,230,170,0.9)');
+        edge(b.slow, b.slowColor || 'rgba(120,170,255,0.9)');
+        ctx.restore();
+      }
     }
 
     _drawBands(L, yOf) {

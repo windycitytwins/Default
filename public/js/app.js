@@ -24,7 +24,7 @@
     lessonIdx: 0,
     stepIdx: 0,
     view: 'lessons',
-    explore: { mode: 'candles', ema9: false, ma20: false, ema21: false, ma50: false, ma100: false, ma200: false, bb: false, vwap: false, volume: true, rsi: false, macd: false, sr: false, log: false }
+    explore: { mode: 'candles', emaband: true, ema9: false, ema21: false, ema50: true, ma20: true, ma50: true, ma100: true, ma200: true, bb: false, vwap: false, volume: true, rsi: false, macd: false, sr: false, log: false }
   };
 
   let chart;
@@ -81,6 +81,8 @@
       chart.setData(data);
       renderHeader();
       markUpdated(data);
+      // Always show the EMA/SMA suite on the trading chart (lessons set their own).
+      if (state.view !== 'lessons') applyExplore(true);
       renderCurrentView();
     } catch (err) {
       showError(err);
@@ -96,6 +98,7 @@
     chart.setData(data);
     renderHeader();
     markUpdated(data);
+    if (state.view !== 'lessons') applyExplore(true);
     renderCurrentView();
   }
 
@@ -403,12 +406,20 @@
     if (!keepView) chart.resetView();
     const candles = state.data.candles;
     const closes = candles.map((c) => c.close);
-    if (ex.ema9) chart.setOverlay('ema9', { data: ta.ema(closes, 9), color: '#9be36b', label: 'EMA 9', dash: [5, 4] });
-    if (ex.ma20) chart.setOverlay('ma20', { data: ta.sma(closes, 20), color: C.ma20, label: 'SMA 20' });
-    if (ex.ema21) chart.setOverlay('ema21', { data: ta.ema(closes, 21), color: C.ema, label: 'EMA 21', dash: [5, 4] });
-    if (ex.ma50) chart.setOverlay('ma50', { data: ta.sma(closes, 50), color: C.ma50, label: 'SMA 50' });
-    if (ex.ma100 && closes.length > 100) chart.setOverlay('ma100', { data: ta.sma(closes, 100), color: '#ff8f5e', label: 'SMA 100' });
-    if (ex.ma200 && closes.length > 200) chart.setOverlay('ma200', { data: ta.sma(closes, 200), color: C.ma200, label: 'SMA 200' });
+    // EMA 9/21 trend-coloured ribbon (drawn under the lines)
+    if (ex.emaband)
+      chart.setEmaBand('ema921', {
+        fast: ta.ema(closes, 9), slow: ta.ema(closes, 21),
+        up: 'rgba(38,161,123,0.16)', down: 'rgba(224,86,106,0.16)',
+        fastColor: 'rgba(120,230,170,0.95)', slowColor: 'rgba(120,170,255,0.95)'
+      });
+    if (ex.ema9) chart.setOverlay('ema9', { data: ta.ema(closes, 9), color: '#2ec27e', label: 'EMA 9', dash: [5, 4] });
+    if (ex.ema21) chart.setOverlay('ema21', { data: ta.ema(closes, 21), color: '#46b3ff', label: 'EMA 21', dash: [5, 4] });
+    if (ex.ema50) chart.setOverlay('ema50', { data: ta.ema(closes, 50), color: '#b083ff', label: 'EMA 50', width: 1.6 });
+    if (ex.ma20) chart.setOverlay('ma20', { data: ta.sma(closes, 20), color: '#9be36b', label: 'SMA 20' });
+    if (ex.ma50) chart.setOverlay('ma50', { data: ta.sma(closes, 50), color: '#5b8cff', label: 'SMA 50' });
+    if (ex.ma100 && closes.length > 100) chart.setOverlay('ma100', { data: ta.sma(closes, 100), color: '#ffb020', label: 'SMA 100' });
+    if (ex.ma200 && closes.length > 200) chart.setOverlay('ma200', { data: ta.sma(closes, 200), color: '#e0566a', label: 'SMA 200' });
     if (ex.bb) {
       const b = ta.bollinger(closes, 20, 2);
       chart.setBand('bb', { upper: b.upper, lower: b.lower, mid: b.mid, color: 'rgba(120,160,255,0.07)', lineColor: 'rgba(150,180,255,0.6)' });
@@ -746,13 +757,48 @@
       .join('');
     return `<div class="sig-card"><div class="sig-card-head"><span class="sig-title">${title} <small>${subtitle}</small></span><span class="rating ${h.rating.cls}">${h.rating.label}</span></div>${sigMeter(h.score)}<div class="sig-factors">${rows}</div></div>`;
   }
-  function renderSignals(box, r, synthetic) {
+  function f2(n) {
+    return n == null ? '—' : Number(n).toFixed(2);
+  }
+  function tradePlanHtml(p) {
+    if (!p) return '';
+    if (!p.ok) {
+      return `<div class="tp-card neutral"><div class="tp-head"><span>Trade plan</span><span class="rating ${p.bias === 'bearish' ? 's' : 'n'}">${p.bias}</span></div><div class="tp-setup">${p.setup}</div><div class="tp-notes">${p.notes.map((n) => `<div>• ${n}</div>`).join('')}</div></div>`;
+    }
+    const rrCls = p.rr >= 2 ? 'g' : p.rr >= 1.5 ? '' : 'x';
+    return (
+      `<div class="tp-card"><div class="tp-head"><span>Trade plan <small>(swing · daily)</small></span><span class="rating b">${p.setup}</span></div>` +
+      `<div class="tp-levels">` +
+      `<div class="tp-lvl entry"><span>Entry</span><b>${f2(p.entry.low)}–${f2(p.entry.high)}</b></div>` +
+      `<div class="tp-lvl stop"><span>Stop</span><b>${f2(p.stop)}</b></div>` +
+      `<div class="tp-lvl t1"><span>Target 1</span><b>${f2(p.targets[0])}</b></div>` +
+      `<div class="tp-lvl t2"><span>Target 2</span><b>${f2(p.targets[1])}</b></div>` +
+      `<div class="tp-lvl rr ${rrCls}"><span>R : R (T1)</span><b>${p.rr.toFixed(1)} : 1</b></div>` +
+      `</div>` +
+      `<div class="tp-notes">${p.notes.map((n) => `<div>• ${n}</div>`).join('')}</div></div>`
+    );
+  }
+  function drawTradePlan(p) {
+    ['tpStop', 'tpT1', 'tpT2'].forEach((id) => chart.removeHLine(id));
+    chart.removeZone('tpEntry');
+    if (!p || !p.ok) {
+      chart.requestRender();
+      return;
+    }
+    chart.setZone('tpEntry', { lo: p.entry.low, hi: p.entry.high, color: 'rgba(38,161,123,0.18)', label: 'Entry', labelColor: 'rgba(120,230,190,0.95)' });
+    chart.setHLine('tpStop', { price: p.stop, color: '#e0566a', label: 'Stop', dash: [6, 4] });
+    chart.setHLine('tpT1', { price: p.targets[0], color: '#5b8cff', label: 'T1', dash: [6, 4] });
+    chart.setHLine('tpT2', { price: p.targets[1], color: '#46b3ff', label: 'T2', dash: [2, 4] });
+  }
+  function renderSignals(box, r, plan, synthetic) {
     box.innerHTML =
       (synthetic ? '<div class="sig-sample">⚠ Sample data — start the live server for a real read.</div>' : '') +
+      tradePlanHtml(plan) +
       `<div class="sig-overall ${r.overall.rating.cls}"><div class="sig-overall-top"><span>Overall technical read</span><span class="rating ${r.overall.rating.cls} big">${r.overall.rating.label}</span></div>${sigMeter(r.overall.score)}<div class="sig-align">${r.alignment}</div></div>` +
       sigCard(r.longTerm, 'Long-term', 'weekly · 5y') +
       sigCard(r.swing, 'Multi-month', 'daily · 1y') +
       sigCard(r.intraday, 'Intraday', 'today · 2-min');
+    drawTradePlan(plan);
   }
   async function runAnalysis() {
     if (analyzing) return;
@@ -781,7 +827,8 @@
     }
     const firstOk = res.find((x) => x.status === 'fulfilled');
     const synthetic = isFile || (firstOk && firstOk.value && firstOk.value.synthetic);
-    renderSignals(box, window.Analysis.multiHorizon(sets), synthetic);
+    const plan = sets.swing ? window.Analysis.tradePlan(sets.swing) : null;
+    renderSignals(box, window.Analysis.multiHorizon(sets), plan, synthetic);
     analyzing = false;
   }
 

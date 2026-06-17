@@ -292,5 +292,91 @@
     return out;
   }
 
-  window.Analysis = { analyze, multiHorizon, ratingFor };
+  /**
+   * A swing-trader trade plan from the (daily) chart: bias, entry zone, a
+   * structure/ATR-based stop, resistance targets and the resulting R:R.
+   * Educational — a framework, not a recommendation.
+   */
+  function tradePlan(candles) {
+    const ta = window.TA;
+    const n = candles ? candles.length : 0;
+    if (!ta || n < 60) return null;
+    const closes = candles.map((c) => c.close);
+    const price = closes[n - 1];
+    const ema9 = ta.ema(closes, 9)[n - 1];
+    const ema21 = ta.ema(closes, 21)[n - 1];
+    const ema50 = ta.ema(closes, 50)[n - 1];
+    const sma200 = ta.sma(closes, 200)[n - 1];
+    const atr = ta.atr(candles, 14)[n - 1] || price * 0.02;
+    const levels = ta.supportResistance(candles, { lookback: 5, maxLevels: 8, minTouches: 2 });
+    const piv = ta.pivots(candles, 4);
+    const recentLows = piv.lows.filter((p) => p.i > n - 40);
+    const swingLow = recentLows.length ? recentLows[recentLows.length - 1].price : price - 2 * atr;
+
+    const bullish = price > ema21 && ema21 >= ema50;
+    const notes = [];
+    if (!bullish) {
+      return {
+        bias: price < ema50 ? 'bearish' : 'neutral',
+        ok: false,
+        setup: price < (sma200 || 0) ? 'No long setup — below the 200-day; stand aside' : 'No clean long setup — wait for price to reclaim the rising EMAs',
+        notes: [
+          'Price is not above a rising EMA 9/21/50 stack — an experienced swing trader waits rather than forcing a long.',
+          'Re-evaluate if it reclaims the EMA 21 and the ribbon turns up.'
+        ]
+      };
+    }
+
+    const extPct = ((price - ema21) / ema21) * 100;
+    let entryLow;
+    let entryHigh;
+    let setup;
+    if (extPct > 8) {
+      setup = 'Buy the pullback to the rising EMA ribbon';
+      entryLow = Math.min(ema21, ema50);
+      entryHigh = ema9;
+      notes.push(`Extended ${extPct.toFixed(0)}% above EMA 21 — wait for a pullback into the ${entryLow.toFixed(2)}–${entryHigh.toFixed(2)} ribbon rather than chasing.`);
+    } else {
+      setup = 'Buy at / near the EMA support zone';
+      entryLow = Math.min(ema21, price) * 0.992;
+      entryHigh = Math.max(ema9, price) * 1.004;
+      notes.push('Price is sitting on the rising EMA ribbon — a constructive entry zone (don’t get shaken out by low-volume dips).');
+    }
+    const entryMid = (entryLow + entryHigh) / 2;
+
+    // stop: below the more relevant of swing low / EMA 50, ATR-buffered, risk-capped
+    let stop = Math.min(swingLow, ema50) - 0.25 * atr;
+    if (entryMid - stop > 2.5 * atr) {
+      stop = entryMid - 2 * atr;
+      notes.push('Structure stop was wide, so the plan caps risk near 2×ATR.');
+    }
+    if (stop >= entryMid) stop = entryMid - 1.5 * atr;
+    const risk = entryMid - stop;
+
+    // a worthwhile first target is at least ~1R above the entry
+    const minT1 = entryMid + Math.max(risk, entryMid * 0.01);
+    const resAbove = levels.filter((l) => l.mid >= minT1).map((l) => l.mid).sort((a, b) => a - b);
+    let t1 = resAbove[0] != null ? resAbove[0] : entryMid + 2 * risk;
+    let t2 = resAbove.find((m) => m > t1 * 1.01);
+    if (t2 == null) t2 = Math.max(t1 + 1.5 * risk, entryMid + 3 * risk);
+    const rr = risk > 0 ? (t1 - entryMid) / risk : 0;
+    notes.push(`Stop below structure at ${stop.toFixed(2)} (the recent swing low / EMA 50). Risk ≈ ${risk.toFixed(2)}/share.`);
+    notes.push(`Targets at overhead resistance: T1 ${t1.toFixed(2)}, T2 ${t2.toFixed(2)} — first target ≈ ${rr.toFixed(1)}R.`);
+    if (rr < 1.5) notes.push('R:R to the first target is below ~1.5 — many swing traders would pass or wait for a better entry.');
+
+    return {
+      bias: 'bullish',
+      ok: true,
+      setup,
+      entry: { low: Math.min(entryLow, entryHigh), high: Math.max(entryLow, entryHigh), mid: entryMid },
+      stop,
+      targets: [t1, t2],
+      risk,
+      rr,
+      atr,
+      notes
+    };
+  }
+
+  window.Analysis = { analyze, multiHorizon, tradePlan, ratingFor };
 })();
