@@ -38,6 +38,8 @@ const MIME = {
 const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+// SEC requires a descriptive User-Agent for programmatic access.
+const SEC_UA = process.env.SEC_UA || 'ChartSchool/1.0 (educational tool; contact via app)';
 const RANGES = new Set(['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max']);
 const INTERVALS = new Set(['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h', '1d', '5d', '1wk', '1mo', '3mo']);
 
@@ -387,6 +389,114 @@ async function fromTwelveData(symbol, interval) {
   return { symbol: symbol.toUpperCase(), currency: 'USD', exchange: '', interval, range: 'max', source: 'Twelve Data', name: (json.meta && json.meta.symbol) || '', fetchedAt: Date.now(), candles };
 }
 
+// --- Nasdaq fundamentals (key stats) ----------------------------------------
+async function fromNasdaqSummary(symbol) {
+  const url = `https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/summary?assetclass=stocks`;
+  const headers = { Accept: 'application/json, text/plain, */*', Origin: 'https://www.nasdaq.com', Referer: 'https://www.nasdaq.com/', 'Accept-Language': 'en-US,en;q=0.9' };
+  const res = await withRetry(() => httpGet(url, { headers, timeoutMs: 9000 }), { attempts: 2 });
+  if (res.status !== 200) throw tagErr(`Nasdaq summary HTTP ${res.status}`, res.status, res.body);
+  const json = JSON.parse(res.body);
+  const sd = json && json.data && json.data.summaryData;
+  if (!sd) throw tagErr('Nasdaq summary: no data', 200, res.body);
+  const g = (k) => (sd[k] && sd[k].value != null && sd[k].value !== 'N/A' ? sd[k].value : null);
+  return {
+    symbol: symbol.toUpperCase(),
+    marketCap: g('MarketCap'),
+    peRatio: g('PERatio'),
+    forwardPE: g('ForwardPE1Yr'),
+    eps: g('EarningsPerShare'),
+    sector: g('Sector'),
+    industry: g('Industry'),
+    week52: g('FiftyTwoWeekHighLow') || g('FiftTwoWeekHighLow'),
+    oneYrTarget: g('OneYrTarget'),
+    yield: g('Yield'),
+    avgVolume: g('AverageVolume')
+  };
+}
+
+// --- SEC EDGAR (free public API) ---------------------------------------------
+let cikMap = null;
+let cikAt = 0;
+async function loadCikMap() {
+  if (cikMap && Date.now() - cikAt < 24 * 3600 * 1000) return cikMap;
+  const res = await httpGet('https://www.sec.gov/files/company_tickers.json', { headers: { 'User-Agent': SEC_UA }, timeoutMs: 12000 });
+  if (res.status !== 200) throw tagErr(`SEC tickers HTTP ${res.status}`, res.status, res.body);
+  const j = JSON.parse(res.body);
+  const map = {};
+  for (const k in j) {
+    const e = j[k];
+    if (e && e.ticker) map[e.ticker.toUpperCase()] = { cik: String(e.cik_str).padStart(10, '0'), title: e.title };
+  }
+  cikMap = map;
+  cikAt = Date.now();
+  return map;
+}
+async function secConcept(cik, tags, unit) {
+  for (const tag of tags) {
+    try {
+      const res = await httpGet(`https://data.sec.gov/api/xbrl/companyconcept/CIK${cik}/us-gaap/${tag}.json`, { headers: { 'User-Agent': SEC_UA }, timeoutMs: 10000 });
+      if (res.status !== 200) continue;
+      const j = JSON.parse(res.body);
+      const arr = j.units && (j.units[unit] || j.units.USD || j.units['USD/shares']);
+      if (!arr) continue;
+      const annual = {};
+      for (const x of arr) if (x.form === '10-K' && x.fp === 'FY' && x.fy) annual[x.fy] = x.val;
+      const years = Object.keys(annual).map(Number).sort((a, b) => a - b).slice(-4);
+      if (years.length) return years.map((y) => ({ fy: y, val: annual[y] }));
+    } catch (_) {}
+  }
+  return [];
+}
+async function edgarReport(symbol) {
+  const map = await loadCikMap();
+  const ent = map[symbol.toUpperCase()];
+  if (!ent) throw tagErr('No SEC CIK found for ' + symbol + ' (US-listed companies only).', 404, '');
+  const res = await httpGet(`https://data.sec.gov/submissions/CIK${ent.cik}.json`, { headers: { 'User-Agent': SEC_UA }, timeoutMs: 12000 });
+  if (res.status !== 200) throw tagErr(`SEC submissions HTTP ${res.status}`, res.status, res.body);
+  const j = JSON.parse(res.body);
+  const r = j.filings && j.filings.recent;
+  const filings = [];
+  const KEEP = ['8-K', '10-Q', '10-K', '6-K', '20-F', 'S-1', 'DEF 14A', '424B4'];
+  if (r) {
+    for (let i = 0; i < r.form.length && filings.length < 12; i++) {
+      if (!KEEP.includes(r.form[i])) continue;
+      const acc = r.accessionNumber[i].replace(/-/g, '');
+      filings.push({ form: r.form[i], date: r.filingDate[i], desc: r.primaryDocDescription[i] || '', url: `https://www.sec.gov/Archives/edgar/data/${parseInt(ent.cik, 10)}/${acc}/${r.primaryDocument[i]}` });
+    }
+  }
+  let financials = { revenue: [], netIncome: [], eps: [] };
+  try {
+    const [revenue, netIncome, eps] = await Promise.all([
+      secConcept(ent.cik, ['RevenueFromContractWithCustomerExcludingAssessedTax', 'Revenues', 'SalesRevenueNet'], 'USD'),
+      secConcept(ent.cik, ['NetIncomeLoss'], 'USD'),
+      secConcept(ent.cik, ['EarningsPerShareDiluted', 'EarningsPerShareBasic'], 'USD/shares')
+    ]);
+    financials = { revenue, netIncome, eps };
+  } catch (_) {}
+  return { cik: ent.cik, name: j.name || ent.title, sic: j.sicDescription || '', exchange: (j.exchanges && j.exchanges[0]) || '', filings, financials, edgarUrl: `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${ent.cik}&type=&dateb=&owner=include&count=40` };
+}
+
+async function profileReport(symbol) {
+  const out = { symbol: symbol.toUpperCase() };
+  try {
+    const q = await getQuote(symbol);
+    if (q) {
+      out.price = q.price;
+      out.change = q.change;
+      out.changePct = q.changePct;
+      out.name = q.name;
+      out.exchange = q.exchange;
+      out.marketState = q.marketState;
+    }
+  } catch (_) {}
+  try {
+    Object.assign(out, await fromNasdaqSummary(symbol));
+  } catch (e) {
+    out.summaryError = e.message;
+  }
+  return out;
+}
+
 // --- unified loader + diagnostics --------------------------------------------
 function providersFor(interval) {
   const daily = ['1d', '1wk', '1mo', '3mo'].includes(interval);
@@ -520,6 +630,8 @@ const server = http.createServer((req, res) => {
   if (p === '/api/chart') return void handleChart(res, q).catch((e) => sendJSON(res, { error: 'server_error', message: e.message }, 500));
   if (p === '/api/search') return void searchSymbols((q.get('q') || '').slice(0, 40)).then((quotes) => sendJSON(res, { quotes })).catch((e) => sendJSON(res, { quotes: [], error: e.message }));
   if (p === '/api/quote') return void getQuote((q.get('symbol') || 'AAPL').toUpperCase().slice(0, 15)).then((r) => (r ? sendJSON(res, r) : sendJSON(res, { error: 'no_quote' }, 502))).catch((e) => sendJSON(res, { error: e.message }, 502));
+  if (p === '/api/profile') return void profileReport((q.get('symbol') || 'AAPL').toUpperCase().slice(0, 15)).then((r) => sendJSON(res, r)).catch((e) => sendJSON(res, { error: e.message }, 502));
+  if (p === '/api/edgar') return void edgarReport((q.get('symbol') || 'AAPL').toUpperCase().slice(0, 15)).then((r) => sendJSON(res, r)).catch((e) => sendJSON(res, { error: e.message, detail: e.snippet || '' }, e.status === 404 ? 404 : 502));
   if (p === '/api/diagnose') return void diagnose((q.get('symbol') || 'AAPL').toUpperCase().slice(0, 15)).then((r) => sendJSON(res, r)).catch((e) => sendJSON(res, { error: e.message }, 500));
   if (p === '/api/health') return void sendJSON(res, { ok: true, twelveDataKey: !!TWELVEDATA_KEY, time: Date.now() });
   // static
@@ -551,4 +663,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { fromYahoo, fromStooq, fromNasdaq, fromNasdaqIntraday, fromNasdaqQuote, getQuote, fromTwelveData, searchSymbols, loadChart, diagnose, applyAdjustment, getYahooAuth };
+module.exports = { fromYahoo, fromStooq, fromNasdaq, fromNasdaqIntraday, fromNasdaqQuote, getQuote, fromTwelveData, fromNasdaqSummary, profileReport, edgarReport, searchSymbols, loadChart, diagnose, applyAdjustment, getYahooAuth };

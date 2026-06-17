@@ -28,6 +28,13 @@ moving averages, volume, and RSI.
   a 9/21-EMA & SMA-stack method with relative strength vs the market,
   constructive-pullback detection and breakdown ("exit") flags. *Educational, not
   advice; chart-structure only (no paid options-flow / dark-pool data).*
+- **A Research tab** — for the loaded ticker: best-effort key stats (P/E, market
+  cap, sector) from Nasdaq, recent **SEC EDGAR** filings (8-K/10-Q/10-K) and basic
+  financials straight from the SEC's free API, plus one-click deep-links
+  (EarningsWhispers, Benzinga, Dataroma, Options AI, Finviz).
+- **A Markets tab** — a sector heat map computed from the SPDR sector ETFs.
+- **A Learn library** — an in-app glossary & "how to read it" reference (earnings,
+  balance sheets, SEC filings, the Fed & rates…) with links to authoritative sources.
 - **Real, accurate live & historical data — free, no API key.** A tiny Node
   proxy fetches prices from **Yahoo Finance** (the same feed behind
   finance.yahoo.com), with **Stooq** as an accuracy backstop. It uses

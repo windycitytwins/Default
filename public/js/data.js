@@ -143,6 +143,20 @@
     return j;
   }
 
+  /** Fundamental key stats (best-effort, from Nasdaq). */
+  async function profile(symbol) {
+    const res = await fetch('/api/profile?symbol=' + encodeURIComponent(symbol), { headers: { Accept: 'application/json' } });
+    return res.json();
+  }
+
+  /** SEC EDGAR filings + basic financials for a US-listed symbol. */
+  async function edgar(symbol) {
+    const res = await fetch('/api/edgar?symbol=' + encodeURIComponent(symbol), { headers: { Accept: 'application/json' } });
+    const j = await res.json();
+    if (!res.ok || j.error) throw new Error(j.error || 'No SEC data');
+    return j;
+  }
+
   /** Explicit, clearly-labelled sample data (offline only — never live). */
   function loadDemo(symbol, range = '1y', interval = '1d') {
     const demo = synth(symbol, range === '5d' || range === '1d' || interval !== '1d' ? 130 : 260);
@@ -152,5 +166,5 @@
     return demo;
   }
 
-  window.MarketData = { load, loadDemo, quote, synth };
+  window.MarketData = { load, loadDemo, quote, profile, edgar, synth };
 })();

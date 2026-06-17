@@ -222,19 +222,78 @@ body {
   background: var(--panel);
   min-height: 0;
 }
-.tabs { display: flex; padding: 10px 12px 0; gap: 6px; }
+.tabs { display: flex; flex-wrap: wrap; padding: 10px 10px 0; gap: 5px; }
 .tab {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   background: transparent;
   border: 1px solid transparent;
   color: var(--muted);
-  padding: 10px;
-  font-size: 13.5px;
+  padding: 8px 9px;
+  font-size: 12.5px;
   font-weight: 600;
-  border-radius: 9px 9px 0 0;
+  border-radius: 8px;
   cursor: pointer;
+  white-space: nowrap;
 }
-.tab.active { color: var(--text); background: var(--panel-2); border-color: var(--border); border-bottom-color: transparent; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--text); background: var(--panel-2); border-color: var(--border); }
+.tab-learn { color: var(--accent-2); }
+
+/* ---------- research ---------- */
+.rsch-head { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.rsch-head h2 { margin: 0; font-size: 19px; }
+.rsch-name { font-size: 12px; color: var(--muted); }
+.rsch-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.rsch-stat { display: flex; justify-content: space-between; gap: 8px; padding: 8px 11px; background: var(--panel-2); font-size: 12.5px; }
+.rsch-stat span { color: var(--muted); }
+.rsch-stat b { color: var(--text); text-align: right; }
+.rsch-links { display: flex; flex-direction: column; gap: 6px; }
+.rsch-link { display: block; padding: 8px 11px; background: #0e1424; border: 1px solid var(--border); border-radius: 8px; color: var(--accent-2); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+.rsch-link:hover { border-color: var(--accent); }
+.rsch-filings { display: flex; flex-direction: column; gap: 5px; }
+.rsch-filing { display: grid; grid-template-columns: 48px 78px 1fr; gap: 8px; align-items: center; padding: 7px 9px; background: #0e1424; border: 1px solid var(--border); border-radius: 8px; text-decoration: none; font-size: 12px; }
+.rsch-filing:hover { border-color: var(--accent); }
+.rsch-form { font-weight: 700; color: var(--accent-2); }
+.rsch-fdate { color: var(--muted); font-variant-numeric: tabular-nums; }
+.rsch-fdesc { color: #cfd6e6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rsch-finrow { margin-bottom: 8px; }
+.rsch-finrow b { font-size: 12px; color: var(--muted); }
+.rsch-fincells { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+.rsch-fincells span { background: #0e1424; border: 1px solid var(--border); border-radius: 7px; padding: 5px 8px; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.rsch-fincells i { display: block; font-style: normal; font-size: 9.5px; color: var(--muted); font-weight: 400; }
+
+/* ---------- markets heat map ---------- */
+.mkt-map { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.mkt-tile { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--border); cursor: pointer; text-align: left; color: var(--text); }
+.mkt-name { font-size: 13px; font-weight: 700; }
+.mkt-sym { font-size: 10.5px; opacity: 0.7; }
+.mkt-chg { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.mkt-chg small { font-size: 10px; font-weight: 500; opacity: 0.7; }
+.mkt-day { font-size: 10.5px; opacity: 0.8; }
+.mkt-tile.h2 { background: rgba(38,161,123,0.32); border-color: rgba(38,161,123,0.6); }
+.mkt-tile.h1 { background: rgba(38,161,123,0.16); }
+.mkt-tile.h0 { background: var(--panel-2); }
+.mkt-tile.hm1 { background: rgba(224,86,106,0.16); }
+.mkt-tile.hm2 { background: rgba(224,86,106,0.32); border-color: rgba(224,86,106,0.6); }
+
+/* ---------- learn modal ---------- */
+.modal { position: fixed; inset: 0; background: rgba(6,9,15,0.7); backdrop-filter: blur(3px); display: none; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
+.modal-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; width: min(720px, 100%); max-height: 86vh; display: flex; flex-direction: column; box-shadow: var(--shadow); }
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--border); }
+.modal-head h2 { margin: 0; font-size: 17px; }
+.modal-x { background: none; border: none; color: var(--muted); font-size: 24px; line-height: 1; cursor: pointer; }
+.modal-x:hover { color: var(--text); }
+.modal-body { overflow-y: auto; padding: 16px 18px; }
+.gl-sec { margin-bottom: 20px; }
+.gl-sec h3 { margin: 0 0 10px; font-size: 14px; color: var(--accent-2); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+.gl-item { margin-bottom: 12px; }
+.gl-term { font-size: 13.5px; font-weight: 700; color: #fff; }
+.gl-def { font-size: 13px; color: #cfd6e6; line-height: 1.55; margin-top: 2px; }
+.gl-def b { color: #fff; }
+.gl-links { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 5px; }
+.gl-links a { font-size: 12px; color: var(--accent-2); text-decoration: none; }
+.gl-links a:hover { text-decoration: underline; }
 
 .tutor-view { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
 
@@ -519,6 +578,9 @@ body {
         <button id="tabExplore" class="tab">🔬 Explore</button>
         <button id="tabSignals" class="tab">🧭 Signals</button>
         <button id="tabScreener" class="tab">🔎 Screener</button>
+        <button id="tabResearch" class="tab">🏢 Research</button>
+        <button id="tabMarkets" class="tab">🗺️ Markets</button>
+        <button id="learnBtn" class="tab tab-learn">📖 Learn</button>
       </div>
 
       <!-- LESSONS -->
@@ -634,8 +696,47 @@ body {
           options flow, and this isn't a whole-market scan — it ranks your watchlist on chart
           structure. Not financial advice.</p>
       </div>
+
+      <!-- RESEARCH -->
+      <div id="researchView" class="tutor-view" style="display:none">
+        <div class="rsch-head"><h2 id="rschSym">—</h2><span id="rschName" class="rsch-name"></span></div>
+        <div id="rschStats" class="rsch-stats"></div>
+        <div class="control-group">
+          <h3>Quick links for <span id="rschLinkSym">—</span></h3>
+          <div id="rschLinks" class="rsch-links"></div>
+        </div>
+        <div class="control-group">
+          <h3>SEC filings <small>(EDGAR)</small></h3>
+          <div id="rschFilings" class="rsch-filings"></div>
+        </div>
+        <div class="control-group">
+          <h3>Financials <small>(annual, from 10-Ks)</small></h3>
+          <div id="rschFin" class="rsch-fin"></div>
+        </div>
+        <p class="disclaimer">Key stats are best-effort from Nasdaq; filings &amp; financials are
+          from the SEC's free EDGAR API. May be delayed or incomplete. Educational, not advice.</p>
+      </div>
+
+      <!-- MARKETS -->
+      <div id="marketsView" class="tutor-view" style="display:none">
+        <p class="explore-intro">Sector-relative performance from the SPDR sector ETFs — green leads,
+          red lags. Click a tile to load that sector's ETF on the chart.</p>
+        <button id="mktRunBtn" class="btn-primary wide">Load sector map</button>
+        <div id="mktMap" class="mkt-map"></div>
+        <p class="ctrl-note">Full-market heat map: <a href="https://finviz.com/map.ashx" target="_blank" rel="noopener">finviz.com/map</a></p>
+      </div>
     </aside>
   </main>
+
+  <div id="glossaryModal" class="modal" style="display:none">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>📖 Learn — glossary &amp; how-to</h2>
+        <button id="glossaryClose" class="modal-x" aria-label="close">×</button>
+      </div>
+      <div id="glossaryBody" class="modal-body"></div>
+    </div>
+  </div>
 
   <script>
 'use strict';
@@ -1152,6 +1253,20 @@ body {
     return j;
   }
 
+  /** Fundamental key stats (best-effort, from Nasdaq). */
+  async function profile(symbol) {
+    const res = await fetch('/api/profile?symbol=' + encodeURIComponent(symbol), { headers: { Accept: 'application/json' } });
+    return res.json();
+  }
+
+  /** SEC EDGAR filings + basic financials for a US-listed symbol. */
+  async function edgar(symbol) {
+    const res = await fetch('/api/edgar?symbol=' + encodeURIComponent(symbol), { headers: { Accept: 'application/json' } });
+    const j = await res.json();
+    if (!res.ok || j.error) throw new Error(j.error || 'No SEC data');
+    return j;
+  }
+
   /** Explicit, clearly-labelled sample data (offline only — never live). */
   function loadDemo(symbol, range = '1y', interval = '1d') {
     const demo = synth(symbol, range === '5d' || range === '1d' || interval !== '1d' ? 130 : 260);
@@ -1161,7 +1276,7 @@ body {
     return demo;
   }
 
-  window.MarketData = { load, loadDemo, quote, synth };
+  window.MarketData = { load, loadDemo, quote, profile, edgar, synth };
 })();
 
 </script>
@@ -3392,6 +3507,82 @@ body {
 'use strict';
 
 /**
+ * glossary.js — an in-app reference library: concise explainers for the terms
+ * and "how to read it" topics a trader needs, each linking out to authoritative
+ * sources. Educational only. Exposed on window.GLOSSARY.
+ */
+(function () {
+  const GLOSSARY = [
+    {
+      title: 'Chart reading',
+      icon: '📊',
+      items: [
+        { term: 'Candlestick', html: 'One bar showing the <b>open, high, low, close</b> for a period. The body is open→close; the wicks reach the high and low. Green = closed up, red = closed down.' },
+        { term: 'Support & resistance', html: 'Price areas where falling prices have tended to bounce (support / floor) or rallies have stalled (resistance / ceiling). Broken levels often flip role.' },
+        { term: 'Moving average (SMA/EMA)', html: 'The average price over N periods, sliding forward. EMA weights recent prices more, so it turns faster. The 9/21 EMAs and 50/200 SMAs are the most watched.' },
+        { term: 'RSI', html: 'Momentum oscillator (0–100). >70 overbought, <30 oversold — but strong trends can stay stretched for a while.', links: [{ label: 'Technical analysis (Investopedia)', url: 'https://www.investopedia.com/terms/t/technicalanalysis.asp' }] }
+      ]
+    },
+    {
+      title: 'Fundamentals',
+      icon: '💵',
+      items: [
+        { term: 'EPS (earnings per share)', html: 'Net income ÷ shares outstanding. The headline number markets react to each quarter; compare actual vs the analyst estimate.' },
+        { term: 'P/E ratio', html: 'Price ÷ EPS — how many dollars you pay per dollar of earnings. High P/E ≠ avoid: the best-performing growth names usually stay "expensive."' },
+        { term: 'Market cap', html: 'Share price × shares outstanding — the company\'s total equity value. Drives whether it\'s a large/mid/small cap.' },
+        { term: 'How to read an earnings report', html: 'Check revenue & EPS vs estimates, guidance for next quarter, margins, and the conference-call tone — guidance often moves the stock more than the print itself.', links: [{ label: 'Decoding earnings reports (Investopedia)', url: 'https://www.investopedia.com/articles/fundamental-analysis/10/decoding-earnings-reports.asp' }, { label: 'How to read an earnings report (Nasdaq)', url: 'https://www.nasdaq.com/articles/how-to-read-an-earnings-report-2021-04-23' }] },
+        { term: 'How to read a balance sheet', html: 'Assets = Liabilities + Equity. Watch cash, debt levels, and the trend over time — a fortress balance sheet survives downturns; a leveraged one is fragile.', links: [{ label: 'How to read a balance sheet (HBS)', url: 'https://online.hbs.edu/blog/post/how-to-read-a-balance-sheet' }, { label: 'Reading the balance sheet (Investopedia)', url: 'https://www.investopedia.com/articles/04/031004.asp' }] }
+      ]
+    },
+    {
+      title: 'SEC filings',
+      icon: '📄',
+      items: [
+        { term: '10-K / 10-Q', html: 'Annual (10-K) and quarterly (10-Q) reports — the full audited/unaudited financials, risk factors and management discussion. The primary source of truth.' },
+        { term: '8-K', html: 'A "current report" filed for material events between quarters — earnings, M&A, executive changes, big contracts. Often the catalyst.' },
+        { term: 'S-1', html: 'The IPO registration statement — read before a company goes public.' },
+        { term: 'Form 4 / 13F', html: 'Form 4 = insider buys/sells (executives, directors). 13F = quarterly holdings of large institutions/hedge funds. Both reveal "smart money" activity.' },
+        { term: 'Where to find them', html: 'Every public filing is free on SEC EDGAR. (This app pulls recent filings for the loaded ticker in the Research tab.)', links: [{ label: 'SEC forms explained (Investopedia)', url: 'https://www.investopedia.com/articles/fundamental-analysis/08/sec-forms.asp' }, { label: 'SEC EDGAR (all filings)', url: 'https://www.sec.gov/edgar.shtml' }] }
+      ]
+    },
+    {
+      title: 'Events & catalysts',
+      icon: '📅',
+      items: [
+        { term: 'Earnings dates', html: 'When a company reports. Volatility spikes around them — many traders avoid holding short-dated options through earnings.', links: [{ label: 'Earnings calendar (EarningsWhispers)', url: 'https://earningswhispers.com/' }] },
+        { term: 'Expected move', html: 'The market-implied price swing for an earnings event, derived from options pricing — useful for sizing and for picking option strikes.', links: [{ label: 'Expected move (Options AI)', url: 'https://tools.optionsai.com/expected-move' }] },
+        { term: 'Analyst rating changes', html: 'Upgrades/downgrades and price-target revisions can move a stock, especially from influential firms.', links: [{ label: 'Upgrades/downgrades (Benzinga)', url: 'https://www.benzinga.com/analyst-stock-ratings/upgrades' }] },
+        { term: 'IPO lockup expiration', html: 'After an IPO, insiders are barred from selling for ~90–180 days. When the lockup expires, new supply can pressure the price.', links: [{ label: 'Lockup expirations (MarketBeat)', url: 'https://www.marketbeat.com/ipos/lockup-expirations/' }] },
+        { term: 'Rights & warrants', html: 'Securities giving the holder the right to buy shares at a set price — common with SPACs and capital raises; they can dilute or reward.', links: [{ label: 'Rights & warrants (Investopedia)', url: 'https://www.investopedia.com/articles/investing/062713/investing-stock-rights-and-warrants.asp' }] }
+      ]
+    },
+    {
+      title: 'Macro',
+      icon: '🏦',
+      items: [
+        { term: 'The Fed & interest rates', html: 'When the Federal Reserve raises rates, borrowing costs rise and future earnings are discounted more heavily — usually a headwind for stocks (especially growth). Cuts tend to be a tailwind.', links: [{ label: 'How the Fed impacts stocks (US News)', url: 'https://money.usnews.com/investing/stock-market-news/articles/how-fed-decisions-impact-the-stock-market' }, { label: 'How interest rates affect stocks (Investopedia)', url: 'https://www.investopedia.com/investing/how-interest-rates-affect-stock-market/' }] },
+        { term: 'Economic calendar', html: 'CPI, jobs, GDP, FOMC meetings — scheduled data that moves the whole market. Know what\'s coming this week.', links: [{ label: 'Economic calendar (MarketWatch)', url: 'https://www.marketwatch.com/economy-politics/calendar' }] }
+      ]
+    },
+    {
+      title: 'Tools',
+      icon: '🔧',
+      items: [
+        { term: 'Stock screeners', html: 'Filter the whole market by technicals/fundamentals to find tradable setups. (This app\'s Screener ranks your watchlist; Finviz scans the full market.)', links: [{ label: 'Finviz screener', url: 'https://finviz.com/screener.ashx' }, { label: 'Finviz heat map', url: 'https://finviz.com/map.ashx' }] },
+        { term: 'Smart-money tracking', html: 'Follow notable hedge-fund and insider buying/selling for ideas and conviction checks.', links: [{ label: 'Dataroma (super-investor holdings)', url: 'https://www.dataroma.com/m/home.php' }] },
+        { term: 'Learn anything', html: 'When a term or concept is unfamiliar, Investopedia is the fastest way to get up to speed.', links: [{ label: 'Investopedia', url: 'https://www.investopedia.com/' }] }
+      ]
+    }
+  ];
+
+  window.GLOSSARY = GLOSSARY;
+})();
+
+</script>
+  <script>
+'use strict';
+
+/**
  * app.js — wires the chart, the data layer and the lesson curriculum into the
  * interactive tutor UI: symbol loading, lesson/step navigation, quizzes,
  * click-on-chart exercises and a free "Explore" sandbox.
@@ -3448,6 +3639,8 @@ body {
     if (state.view === 'lessons') renderStep();
     else if (state.view === 'signals') prepSignals();
     else if (state.view === 'screener') renderWatchlist();
+    else if (state.view === 'research') renderResearch();
+    else if (state.view === 'markets') prepMarkets();
     else applyExplore();
   }
 
@@ -3818,14 +4011,13 @@ body {
   }
 
   function syncTabs() {
-    $('#tabLessons').classList.toggle('active', state.view === 'lessons');
-    $('#tabExplore').classList.toggle('active', state.view === 'explore');
-    $('#tabSignals').classList.toggle('active', state.view === 'signals');
-    $('#tabScreener').classList.toggle('active', state.view === 'screener');
-    $('#lessonsView').style.display = state.view === 'lessons' ? 'flex' : 'none';
-    $('#exploreView').style.display = state.view === 'explore' ? 'block' : 'none';
-    $('#signalsView').style.display = state.view === 'signals' ? 'flex' : 'none';
-    $('#screenerView').style.display = state.view === 'screener' ? 'flex' : 'none';
+    const views = ['lessons', 'explore', 'signals', 'screener', 'research', 'markets'];
+    const tabIds = { lessons: 'tabLessons', explore: 'tabExplore', signals: 'tabSignals', screener: 'tabScreener', research: 'tabResearch', markets: 'tabMarkets' };
+    const viewIds = { lessons: 'lessonsView', explore: 'exploreView', signals: 'signalsView', screener: 'screenerView', research: 'researchView', markets: 'marketsView' };
+    views.forEach((v) => {
+      $('#' + tabIds[v]).classList.toggle('active', state.view === v);
+      $('#' + viewIds[v]).style.display = state.view === v ? (v === 'explore' ? 'block' : 'flex') : 'none';
+    });
   }
 
   // ---- screener (swing-trade watchlist ranker) -----------------------------
@@ -3939,6 +4131,177 @@ body {
       `</div>` +
       `<div class="scr-detail"><div class="scr-bullets">${bullets}</div></div>`
     );
+  }
+
+  // ---- research (key stats + deep links + SEC EDGAR) -----------------------
+  function researchLinks(sym) {
+    const s = encodeURIComponent(sym);
+    return [
+      ['EarningsWhispers', `https://www.earningswhispers.com/stocks/${s}`],
+      ['Analyst ratings (Benzinga)', `https://www.benzinga.com/quote/${s}`],
+      ['Expected move (Options AI)', `https://tools.optionsai.com/expected-move/${s}`],
+      ['Finviz', `https://finviz.com/quote.ashx?t=${s}`],
+      ['Dataroma (ownership)', `https://www.dataroma.com/m/stock.php?sym=${s}`],
+      ['SEC EDGAR filings', `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&ticker=${s}&type=&dateb=&owner=include&count=40`]
+    ];
+  }
+  function fmtBig(v) {
+    return v == null ? '—' : v;
+  }
+  async function renderResearch() {
+    const sym = state.symbol;
+    $('#rschSym').textContent = sym;
+    $('#rschLinkSym').textContent = sym;
+    $('#rschName').textContent = (state.data && state.data.name) || '';
+    // deep links (always available)
+    $('#rschLinks').innerHTML = researchLinks(sym)
+      .map(([label, url]) => `<a class="rsch-link" href="${url}" target="_blank" rel="noopener">${label} ↗</a>`)
+      .join('');
+    if (state._rschSym === sym) return; // already loaded this symbol's data
+    state._rschSym = sym;
+    const statsBox = $('#rschStats');
+    const filingsBox = $('#rschFilings');
+    const finBox = $('#rschFin');
+    const isFile = location.protocol === 'file:';
+    if (isFile) {
+      statsBox.innerHTML = '<div class="sig-sample">Start the live server for key stats, filings & financials.</div>';
+      filingsBox.innerHTML = '';
+      finBox.innerHTML = '';
+      return;
+    }
+    statsBox.innerHTML = '<div class="sig-loading">Loading key stats…</div>';
+    filingsBox.innerHTML = '<div class="sig-loading">Loading filings…</div>';
+    finBox.innerHTML = '';
+    // key stats
+    try {
+      const p = await window.MarketData.profile(sym);
+      if (sym !== state.symbol) return;
+      const rows = [
+        ['Price', p.price != null ? Number(p.price).toFixed(2) : '—'],
+        ['Market cap', fmtBig(p.marketCap)],
+        ['P/E', fmtBig(p.peRatio)],
+        ['Fwd P/E', fmtBig(p.forwardPE)],
+        ['EPS', fmtBig(p.eps)],
+        ['Sector', fmtBig(p.sector)],
+        ['Industry', fmtBig(p.industry)],
+        ['52-wk', fmtBig(p.week52)],
+        ['1-yr target', fmtBig(p.oneYrTarget)]
+      ].filter((r) => r[1] !== '—');
+      statsBox.innerHTML = rows.map(([k, v]) => `<div class="rsch-stat"><span>${k}</span><b>${v}</b></div>`).join('') || '<div class="sig-error">Key stats unavailable for ' + sym + '.</div>';
+    } catch (_) {
+      statsBox.innerHTML = '<div class="sig-error">Key stats unavailable.</div>';
+    }
+    // SEC EDGAR
+    try {
+      const e = await window.MarketData.edgar(sym);
+      if (sym !== state.symbol) return;
+      filingsBox.innerHTML =
+        (e.filings && e.filings.length
+          ? e.filings.map((f) => `<a class="rsch-filing" href="${f.url}" target="_blank" rel="noopener"><span class="rsch-form">${f.form}</span><span class="rsch-fdate">${f.date}</span><span class="rsch-fdesc">${f.desc || ''}</span></a>`).join('')
+          : '<div class="ctrl-note">No recent filings found.</div>') +
+        (e.edgarUrl ? `<a class="rsch-link" href="${e.edgarUrl}" target="_blank" rel="noopener">All filings on EDGAR ↗</a>` : '');
+      finBox.innerHTML = renderFinancials(e.financials);
+    } catch (err) {
+      filingsBox.innerHTML = `<div class="ctrl-note">${(err && err.message) || 'No SEC data'} (US-listed companies only).</div>`;
+      finBox.innerHTML = '';
+    }
+  }
+  function abbrNum(n) {
+    const a = Math.abs(n);
+    if (a >= 1e12) return (n / 1e12).toFixed(2) + 'T';
+    if (a >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+    if (a >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (a >= 1e3) return (n / 1e3).toFixed(0) + 'K';
+    return String(Math.round(n));
+  }
+  function renderFinancials(fin) {
+    if (!fin || (!fin.revenue.length && !fin.netIncome.length && !fin.eps.length)) return '<div class="ctrl-note">Financial facts not available.</div>';
+    const line = (label, arr, money) => {
+      if (!arr || !arr.length) return '';
+      const cells = arr.map((x) => `<span><i>${x.fy}</i>${money ? '
+</body>
+</html>
+ + abbrNum(x.val) : x.val.toFixed(2)}</span>`).join('');
+      return `<div class="rsch-finrow"><b>${label}</b><div class="rsch-fincells">${cells}</div></div>`;
+    };
+    return line('Revenue', fin.revenue, true) + line('Net income', fin.netIncome, true) + line('Diluted EPS', fin.eps, false);
+  }
+
+  // ---- markets (sector heat map) -------------------------------------------
+  const SECTORS = [
+    ['XLK', 'Technology'], ['XLC', 'Communication'], ['XLY', 'Consumer Disc.'], ['XLF', 'Financials'],
+    ['XLV', 'Health Care'], ['XLI', 'Industrials'], ['XLP', 'Consumer Staples'], ['XLE', 'Energy'],
+    ['XLU', 'Utilities'], ['XLB', 'Materials'], ['XLRE', 'Real Estate']
+  ];
+  let sectorsLoaded = false;
+  function prepMarkets() {
+    if (!sectorsLoaded) runSectorMap();
+  }
+  function heatClass(p) {
+    if (p >= 2) return 'h2';
+    if (p >= 0.5) return 'h1';
+    if (p > -0.5) return 'h0';
+    if (p > -2) return 'hm1';
+    return 'hm2';
+  }
+  async function runSectorMap() {
+    const box = $('#mktMap');
+    box.innerHTML = '<div class="sig-loading">Loading sector ETFs…</div>';
+    const isFile = location.protocol === 'file:';
+    const fetchBars = (sym) => (isFile ? Promise.resolve(window.MarketData.loadDemo(sym, '6mo', '1d')) : window.MarketData.load(sym, '6mo', '1d', { quote: false }));
+    const datas = await mapPool(SECTORS.map((s) => s[0]), 4, fetchBars);
+    const tiles = [];
+    SECTORS.forEach((s, i) => {
+      const d = datas[i];
+      if (!d || !d.candles || d.candles.length < 6) return;
+      const c = d.candles.map((x) => x.close);
+      const n = c.length;
+      const day = ((c[n - 1] - c[n - 2]) / c[n - 2]) * 100;
+      const wk = ((c[n - 1] - c[Math.max(0, n - 6)]) / c[Math.max(0, n - 6)]) * 100;
+      tiles.push({ sym: s[0], name: s[1], day, wk });
+    });
+    tiles.sort((a, b) => b.wk - a.wk);
+    if (!tiles.length) {
+      box.innerHTML = '<div class="sig-error">Couldn’t load sector data — try again.</div>';
+      return;
+    }
+    sectorsLoaded = true;
+    box.innerHTML = tiles
+      .map(
+        (t) =>
+          `<button class="mkt-tile ${heatClass(t.wk)}" data-sym="${t.sym}"><span class="mkt-name">${t.name}</span><span class="mkt-sym">${t.sym}</span><span class="mkt-chg">${t.wk >= 0 ? '+' : ''}${t.wk.toFixed(1)}%<small> 1w</small></span><span class="mkt-day">${t.day >= 0 ? '+' : ''}${t.day.toFixed(1)}% today</span></button>`
+      )
+      .join('');
+    box.querySelectorAll('.mkt-tile').forEach((tile) => tile.addEventListener('click', () => loadSymbol(tile.dataset.sym)));
+  }
+
+  // ---- glossary modal ------------------------------------------------------
+  function renderGlossary() {
+    const body = $('#glossaryBody');
+    if (body.dataset.built) return;
+    body.innerHTML = (window.GLOSSARY || [])
+      .map(
+        (sec) =>
+          `<div class="gl-sec"><h3>${sec.icon} ${sec.title}</h3>` +
+          sec.items
+            .map(
+              (it) =>
+                `<div class="gl-item"><div class="gl-term">${it.term}</div><div class="gl-def">${it.html}</div>` +
+                (it.links ? '<div class="gl-links">' + it.links.map((l) => `<a href="${l.url}" target="_blank" rel="noopener">${l.label} ↗</a>`).join('') + '</div>' : '') +
+                `</div>`
+            )
+            .join('') +
+          `</div>`
+      )
+      .join('');
+    body.dataset.built = '1';
+  }
+  function openGlossary() {
+    renderGlossary();
+    $('#glossaryModal').style.display = 'flex';
+  }
+  function closeGlossary() {
+    $('#glossaryModal').style.display = 'none';
   }
 
   // ---- signals (multi-timeframe technical read) ----------------------------
@@ -4059,6 +4422,24 @@ body {
       if (e.key === 'Enter') addWatch($('#wlInput').value);
     });
     $('#runScreenerBtn').addEventListener('click', runScreener);
+    $('#tabResearch').addEventListener('click', () => {
+      state.view = 'research';
+      syncTabs();
+      renderResearch();
+      save();
+    });
+    $('#tabMarkets').addEventListener('click', () => {
+      state.view = 'markets';
+      syncTabs();
+      prepMarkets();
+      save();
+    });
+    $('#mktRunBtn').addEventListener('click', runSectorMap);
+    $('#learnBtn').addEventListener('click', openGlossary);
+    $('#glossaryClose').addEventListener('click', closeGlossary);
+    $('#glossaryModal').addEventListener('click', (e) => {
+      if (e.target.id === 'glossaryModal') closeGlossary();
+    });
 
     $('#prevBtn').addEventListener('click', () => go(-1));
     $('#nextBtn').addEventListener('click', () => go(1));

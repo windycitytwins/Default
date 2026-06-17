@@ -57,6 +57,8 @@
     if (state.view === 'lessons') renderStep();
     else if (state.view === 'signals') prepSignals();
     else if (state.view === 'screener') renderWatchlist();
+    else if (state.view === 'research') renderResearch();
+    else if (state.view === 'markets') prepMarkets();
     else applyExplore();
   }
 
@@ -427,14 +429,13 @@
   }
 
   function syncTabs() {
-    $('#tabLessons').classList.toggle('active', state.view === 'lessons');
-    $('#tabExplore').classList.toggle('active', state.view === 'explore');
-    $('#tabSignals').classList.toggle('active', state.view === 'signals');
-    $('#tabScreener').classList.toggle('active', state.view === 'screener');
-    $('#lessonsView').style.display = state.view === 'lessons' ? 'flex' : 'none';
-    $('#exploreView').style.display = state.view === 'explore' ? 'block' : 'none';
-    $('#signalsView').style.display = state.view === 'signals' ? 'flex' : 'none';
-    $('#screenerView').style.display = state.view === 'screener' ? 'flex' : 'none';
+    const views = ['lessons', 'explore', 'signals', 'screener', 'research', 'markets'];
+    const tabIds = { lessons: 'tabLessons', explore: 'tabExplore', signals: 'tabSignals', screener: 'tabScreener', research: 'tabResearch', markets: 'tabMarkets' };
+    const viewIds = { lessons: 'lessonsView', explore: 'exploreView', signals: 'signalsView', screener: 'screenerView', research: 'researchView', markets: 'marketsView' };
+    views.forEach((v) => {
+      $('#' + tabIds[v]).classList.toggle('active', state.view === v);
+      $('#' + viewIds[v]).style.display = state.view === v ? (v === 'explore' ? 'block' : 'flex') : 'none';
+    });
   }
 
   // ---- screener (swing-trade watchlist ranker) -----------------------------
@@ -548,6 +549,174 @@
       `</div>` +
       `<div class="scr-detail"><div class="scr-bullets">${bullets}</div></div>`
     );
+  }
+
+  // ---- research (key stats + deep links + SEC EDGAR) -----------------------
+  function researchLinks(sym) {
+    const s = encodeURIComponent(sym);
+    return [
+      ['EarningsWhispers', `https://www.earningswhispers.com/stocks/${s}`],
+      ['Analyst ratings (Benzinga)', `https://www.benzinga.com/quote/${s}`],
+      ['Expected move (Options AI)', `https://tools.optionsai.com/expected-move/${s}`],
+      ['Finviz', `https://finviz.com/quote.ashx?t=${s}`],
+      ['Dataroma (ownership)', `https://www.dataroma.com/m/stock.php?sym=${s}`],
+      ['SEC EDGAR filings', `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&ticker=${s}&type=&dateb=&owner=include&count=40`]
+    ];
+  }
+  function fmtBig(v) {
+    return v == null ? '—' : v;
+  }
+  async function renderResearch() {
+    const sym = state.symbol;
+    $('#rschSym').textContent = sym;
+    $('#rschLinkSym').textContent = sym;
+    $('#rschName').textContent = (state.data && state.data.name) || '';
+    // deep links (always available)
+    $('#rschLinks').innerHTML = researchLinks(sym)
+      .map(([label, url]) => `<a class="rsch-link" href="${url}" target="_blank" rel="noopener">${label} ↗</a>`)
+      .join('');
+    if (state._rschSym === sym) return; // already loaded this symbol's data
+    state._rschSym = sym;
+    const statsBox = $('#rschStats');
+    const filingsBox = $('#rschFilings');
+    const finBox = $('#rschFin');
+    const isFile = location.protocol === 'file:';
+    if (isFile) {
+      statsBox.innerHTML = '<div class="sig-sample">Start the live server for key stats, filings & financials.</div>';
+      filingsBox.innerHTML = '';
+      finBox.innerHTML = '';
+      return;
+    }
+    statsBox.innerHTML = '<div class="sig-loading">Loading key stats…</div>';
+    filingsBox.innerHTML = '<div class="sig-loading">Loading filings…</div>';
+    finBox.innerHTML = '';
+    // key stats
+    try {
+      const p = await window.MarketData.profile(sym);
+      if (sym !== state.symbol) return;
+      const rows = [
+        ['Price', p.price != null ? Number(p.price).toFixed(2) : '—'],
+        ['Market cap', fmtBig(p.marketCap)],
+        ['P/E', fmtBig(p.peRatio)],
+        ['Fwd P/E', fmtBig(p.forwardPE)],
+        ['EPS', fmtBig(p.eps)],
+        ['Sector', fmtBig(p.sector)],
+        ['Industry', fmtBig(p.industry)],
+        ['52-wk', fmtBig(p.week52)],
+        ['1-yr target', fmtBig(p.oneYrTarget)]
+      ].filter((r) => r[1] !== '—');
+      statsBox.innerHTML = rows.map(([k, v]) => `<div class="rsch-stat"><span>${k}</span><b>${v}</b></div>`).join('') || '<div class="sig-error">Key stats unavailable for ' + sym + '.</div>';
+    } catch (_) {
+      statsBox.innerHTML = '<div class="sig-error">Key stats unavailable.</div>';
+    }
+    // SEC EDGAR
+    try {
+      const e = await window.MarketData.edgar(sym);
+      if (sym !== state.symbol) return;
+      filingsBox.innerHTML =
+        (e.filings && e.filings.length
+          ? e.filings.map((f) => `<a class="rsch-filing" href="${f.url}" target="_blank" rel="noopener"><span class="rsch-form">${f.form}</span><span class="rsch-fdate">${f.date}</span><span class="rsch-fdesc">${f.desc || ''}</span></a>`).join('')
+          : '<div class="ctrl-note">No recent filings found.</div>') +
+        (e.edgarUrl ? `<a class="rsch-link" href="${e.edgarUrl}" target="_blank" rel="noopener">All filings on EDGAR ↗</a>` : '');
+      finBox.innerHTML = renderFinancials(e.financials);
+    } catch (err) {
+      filingsBox.innerHTML = `<div class="ctrl-note">${(err && err.message) || 'No SEC data'} (US-listed companies only).</div>`;
+      finBox.innerHTML = '';
+    }
+  }
+  function abbrNum(n) {
+    const a = Math.abs(n);
+    if (a >= 1e12) return (n / 1e12).toFixed(2) + 'T';
+    if (a >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+    if (a >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (a >= 1e3) return (n / 1e3).toFixed(0) + 'K';
+    return String(Math.round(n));
+  }
+  function renderFinancials(fin) {
+    if (!fin || (!fin.revenue.length && !fin.netIncome.length && !fin.eps.length)) return '<div class="ctrl-note">Financial facts not available.</div>';
+    const line = (label, arr, money) => {
+      if (!arr || !arr.length) return '';
+      const cells = arr.map((x) => `<span><i>${x.fy}</i>${money ? '$' + abbrNum(x.val) : x.val.toFixed(2)}</span>`).join('');
+      return `<div class="rsch-finrow"><b>${label}</b><div class="rsch-fincells">${cells}</div></div>`;
+    };
+    return line('Revenue', fin.revenue, true) + line('Net income', fin.netIncome, true) + line('Diluted EPS', fin.eps, false);
+  }
+
+  // ---- markets (sector heat map) -------------------------------------------
+  const SECTORS = [
+    ['XLK', 'Technology'], ['XLC', 'Communication'], ['XLY', 'Consumer Disc.'], ['XLF', 'Financials'],
+    ['XLV', 'Health Care'], ['XLI', 'Industrials'], ['XLP', 'Consumer Staples'], ['XLE', 'Energy'],
+    ['XLU', 'Utilities'], ['XLB', 'Materials'], ['XLRE', 'Real Estate']
+  ];
+  let sectorsLoaded = false;
+  function prepMarkets() {
+    if (!sectorsLoaded) runSectorMap();
+  }
+  function heatClass(p) {
+    if (p >= 2) return 'h2';
+    if (p >= 0.5) return 'h1';
+    if (p > -0.5) return 'h0';
+    if (p > -2) return 'hm1';
+    return 'hm2';
+  }
+  async function runSectorMap() {
+    const box = $('#mktMap');
+    box.innerHTML = '<div class="sig-loading">Loading sector ETFs…</div>';
+    const isFile = location.protocol === 'file:';
+    const fetchBars = (sym) => (isFile ? Promise.resolve(window.MarketData.loadDemo(sym, '6mo', '1d')) : window.MarketData.load(sym, '6mo', '1d', { quote: false }));
+    const datas = await mapPool(SECTORS.map((s) => s[0]), 4, fetchBars);
+    const tiles = [];
+    SECTORS.forEach((s, i) => {
+      const d = datas[i];
+      if (!d || !d.candles || d.candles.length < 6) return;
+      const c = d.candles.map((x) => x.close);
+      const n = c.length;
+      const day = ((c[n - 1] - c[n - 2]) / c[n - 2]) * 100;
+      const wk = ((c[n - 1] - c[Math.max(0, n - 6)]) / c[Math.max(0, n - 6)]) * 100;
+      tiles.push({ sym: s[0], name: s[1], day, wk });
+    });
+    tiles.sort((a, b) => b.wk - a.wk);
+    if (!tiles.length) {
+      box.innerHTML = '<div class="sig-error">Couldn’t load sector data — try again.</div>';
+      return;
+    }
+    sectorsLoaded = true;
+    box.innerHTML = tiles
+      .map(
+        (t) =>
+          `<button class="mkt-tile ${heatClass(t.wk)}" data-sym="${t.sym}"><span class="mkt-name">${t.name}</span><span class="mkt-sym">${t.sym}</span><span class="mkt-chg">${t.wk >= 0 ? '+' : ''}${t.wk.toFixed(1)}%<small> 1w</small></span><span class="mkt-day">${t.day >= 0 ? '+' : ''}${t.day.toFixed(1)}% today</span></button>`
+      )
+      .join('');
+    box.querySelectorAll('.mkt-tile').forEach((tile) => tile.addEventListener('click', () => loadSymbol(tile.dataset.sym)));
+  }
+
+  // ---- glossary modal ------------------------------------------------------
+  function renderGlossary() {
+    const body = $('#glossaryBody');
+    if (body.dataset.built) return;
+    body.innerHTML = (window.GLOSSARY || [])
+      .map(
+        (sec) =>
+          `<div class="gl-sec"><h3>${sec.icon} ${sec.title}</h3>` +
+          sec.items
+            .map(
+              (it) =>
+                `<div class="gl-item"><div class="gl-term">${it.term}</div><div class="gl-def">${it.html}</div>` +
+                (it.links ? '<div class="gl-links">' + it.links.map((l) => `<a href="${l.url}" target="_blank" rel="noopener">${l.label} ↗</a>`).join('') + '</div>' : '') +
+                `</div>`
+            )
+            .join('') +
+          `</div>`
+      )
+      .join('');
+    body.dataset.built = '1';
+  }
+  function openGlossary() {
+    renderGlossary();
+    $('#glossaryModal').style.display = 'flex';
+  }
+  function closeGlossary() {
+    $('#glossaryModal').style.display = 'none';
   }
 
   // ---- signals (multi-timeframe technical read) ----------------------------
@@ -668,6 +837,24 @@
       if (e.key === 'Enter') addWatch($('#wlInput').value);
     });
     $('#runScreenerBtn').addEventListener('click', runScreener);
+    $('#tabResearch').addEventListener('click', () => {
+      state.view = 'research';
+      syncTabs();
+      renderResearch();
+      save();
+    });
+    $('#tabMarkets').addEventListener('click', () => {
+      state.view = 'markets';
+      syncTabs();
+      prepMarkets();
+      save();
+    });
+    $('#mktRunBtn').addEventListener('click', runSectorMap);
+    $('#learnBtn').addEventListener('click', openGlossary);
+    $('#glossaryClose').addEventListener('click', closeGlossary);
+    $('#glossaryModal').addEventListener('click', (e) => {
+      if (e.target.id === 'glossaryModal') closeGlossary();
+    });
 
     $('#prevBtn').addEventListener('click', () => go(-1));
     $('#nextBtn').addEventListener('click', () => go(1));
