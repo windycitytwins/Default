@@ -3818,8 +3818,22 @@ body {
     const piv = ta.zigzag(candles, pct);
     if (piv.length < 4) return { found: false, pivots: piv, pct, note: 'Too few significant swings at this sensitivity — Elliott counts read best on weekly/monthly charts.' };
     const lastClose = candles[candles.length - 1].close;
-    const imp = tryImpulse(piv, lastClose, candles);
-    if (imp) return { found: true, pivots: piv, pct, ...imp };
+    let usePiv = piv;
+    let usePct = pct;
+    let imp = tryImpulse(piv, lastClose, candles);
+    // Steep, barely-subdivided runs (e.g. parabolic movers) may not show 5 clean
+    // swings at the default sensitivity — retry once at a finer ZigZag.
+    if (!imp) {
+      const finer = +(pct * 0.6).toFixed(3);
+      const pivF = ta.zigzag(candles, finer);
+      const impF = pivF.length >= 6 ? tryImpulse(pivF, lastClose, candles) : null;
+      if (impF) {
+        imp = impF;
+        usePiv = pivF;
+        usePct = finer;
+      }
+    }
+    if (imp) return { found: true, pivots: usePiv, pct: usePct, ...imp };
     const corr = tryCorrection(piv);
     if (corr) return { found: true, pivots: piv, pct, ...corr };
     return { found: false, pivots: piv, pct, note: 'No clean 5-wave or A-B-C structure at this sensitivity. Counts are subjective — try weekly/monthly data.' };
