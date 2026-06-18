@@ -65,12 +65,22 @@
       let r = null;
       if (t === 'LHLHLH') r = score(s, 1);
       else if (t === 'HLHLHL') r = score(s, -1);
-      if (r && (!best || r.score > best.score || (r.score === best.score && s[5].i > best.seg[5].i))) best = r;
-      if (best && best.score === 3) break;
+      // Rule 1 (W2 < 100% of W1) is mandatory — a deeper retrace invalidates
+      // the wave-1 low entirely.
+      if (!r || !r.rules[0].ok) continue;
+      // Volume bias toward the textbook signature: Wave 3 should carry peak
+      // volume. This nudges the auto-count toward a clean, expert-like labelling.
+      const wv = waveVolumes(s, candles);
+      const peak = wv.indexOf(Math.max.apply(null, wv));
+      r.volBonus = (peak === 2 ? 1 : 0) + (wv[2] > wv[0] && wv[2] > wv[4] ? 0.5 : 0);
+      const better =
+        !best ||
+        r.score > best.score ||
+        (r.score === best.score && r.volBonus > best.volBonus) ||
+        (r.score === best.score && r.volBonus === best.volBonus && s[5].i > best.seg[5].i);
+      if (better) best = r;
     }
-    // Rule 1 (W2 < 100% of W1) is mandatory — a deeper retrace invalidates the
-    // wave-1 low entirely; require it plus at least one other rule.
-    if (!best || best.score < 2 || !best.rules[0].ok) return null;
+    if (!best || best.score < 2) return null;
     return finishImpulse(best, lastClose, candles);
   }
 
