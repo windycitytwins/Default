@@ -263,6 +263,31 @@ body {
 .rsch-fincells span { background: #0e1424; border: 1px solid var(--border); border-radius: 7px; padding: 5px 8px; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .rsch-fincells i { display: block; font-style: normal; font-size: 9.5px; color: var(--muted); font-weight: 400; }
 
+/* ---------- research blueprint ---------- */
+.bp-header { display: flex; flex-direction: column; gap: 8px; }
+.bp-title { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.bp-title h2 { margin: 0; font-size: 19px; }
+.bp-date { font-size: 11px; color: var(--muted); }
+.bp-body { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.bp-sec { border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); overflow: hidden; }
+.bp-sec-head { list-style: none; cursor: pointer; padding: 11px 13px; display: flex; flex-direction: column; gap: 2px; }
+.bp-sec-head::-webkit-details-marker { display: none; }
+.bp-sec-head span { font-size: 13.5px; font-weight: 700; }
+.bp-sec-head i { font-size: 11.5px; color: var(--accent-2); font-style: italic; }
+.bp-sec[open] .bp-sec-head { border-bottom: 1px solid var(--border); }
+.bp-group { padding: 10px 13px; border-top: 1px solid rgba(255,255,255,0.03); }
+.bp-group:first-of-type { border-top: none; }
+.bp-group h4 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+.bp-field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 9px; }
+.bp-field > span { font-size: 12px; font-weight: 600; color: #cfd6e6; }
+.bp-field textarea, .bp-note { width: 100%; resize: none; box-sizing: border-box; background: #0e1424; border: 1px solid var(--border); border-radius: 7px; color: var(--text); font-family: inherit; font-size: 12.5px; padding: 7px 9px; outline: none; overflow: hidden; line-height: 1.4; }
+.bp-field textarea:focus, .bp-note:focus { border-color: var(--accent); }
+.bp-field textarea::placeholder, .bp-note::placeholder { color: #56607a; }
+.bp-check { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; font-size: 12.5px; cursor: pointer; color: #cfd6e6; }
+.bp-check input { margin-top: 2px; accent-color: var(--accent); flex-shrink: 0; }
+.bp-auto { padding: 10px 13px; border-top: 1px solid var(--border); background: rgba(91,140,255,0.05); }
+.bp-auto-h { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent-2); margin-bottom: 8px; }
+
 /* ---------- markets heat map ---------- */
 .mkt-map { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .mkt-tile { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--border); cursor: pointer; text-align: left; color: var(--text); }
@@ -719,22 +744,16 @@ body {
 
       <!-- RESEARCH -->
       <div id="researchView" class="tutor-view" style="display:none">
-        <div class="rsch-head"><h2 id="rschSym">—</h2><span id="rschName" class="rsch-name"></span></div>
-        <div id="rschStats" class="rsch-stats"></div>
-        <div class="control-group">
-          <h3>Quick links for <span id="rschLinkSym">—</span></h3>
+        <div class="bp-header">
+          <div class="bp-title"><h2 id="rschSym">—</h2><span id="rschName" class="rsch-name"></span></div>
+          <div id="rschDate" class="bp-date"></div>
+          <div id="rschStats" class="rsch-stats"></div>
           <div id="rschLinks" class="rsch-links"></div>
         </div>
-        <div class="control-group">
-          <h3>SEC filings <small>(EDGAR)</small></h3>
-          <div id="rschFilings" class="rsch-filings"></div>
-        </div>
-        <div class="control-group">
-          <h3>Financials <small>(annual, from 10-Ks)</small></h3>
-          <div id="rschFin" class="rsch-fin"></div>
-        </div>
-        <p class="disclaimer">Key stats are best-effort from Nasdaq; filings &amp; financials are
-          from the SEC's free EDGAR API. May be delayed or incomplete. Educational, not advice.</p>
+        <div id="blueprintBody" class="bp-body"></div>
+        <p class="disclaimer">A research worksheet — it auto-fills the hard data it can fetch; you
+          fill in the analysis. Everything is <b>saved per ticker on this device</b>. Verify before
+          acting. Educational, not financial advice.</p>
       </div>
 
       <!-- MARKETS -->
@@ -3807,6 +3826,183 @@ body {
 'use strict';
 
 /**
+ * blueprint.js — the "Stock Research Blueprint" schema: a structured
+ * due-diligence worksheet. Quantitative fields are auto-filled from data; the
+ * qualitative fields are prompts for the user's own research. Saved per ticker.
+ * Exposed on window.BLUEPRINT.
+ */
+(function () {
+  const BLUEPRINT = {
+    // header key-stats (auto-filled from /api/profile where available)
+    stats: [
+      { key: 'price', label: 'Price' },
+      { key: 'marketCap', label: 'Market cap' },
+      { key: 'sector', label: 'Sector' },
+      { key: 'industry', label: 'Industry' },
+      { key: 'exchange', label: 'Exchange' },
+      { key: 'avgVolume', label: 'Avg volume' },
+      { key: 'week52', label: '52-wk range' },
+      { key: 'peRatio', label: 'P/E' },
+      { key: 'forwardPE', label: 'Fwd P/E' },
+      { key: 'yield', label: 'Div yield' },
+      { key: 'eps', label: 'EPS' },
+      { key: 'oneYrTarget', label: '1-yr target' }
+    ],
+    sections: [
+      {
+        id: 'business', icon: '🧩', title: 'Business Model', q: 'Could you explain it to a 12-year-old?',
+        groups: [
+          { title: 'What they actually do', fields: [
+            { id: 'biz_what', label: 'In plain English', ph: 'What do they sell, and to whom?' },
+            { id: 'biz_customers', label: 'Customers', ph: 'DTC / B2B? Who actually pays?' },
+            { id: 'biz_geo', label: 'Geography', ph: 'Where do they operate / grow?' }
+          ] },
+          { title: 'Revenue engine', fields: [
+            { id: 'rev_streams', label: 'Streams', ph: 'How do they make money? (subscriptions, ads, hardware…)' },
+            { id: 'rev_recurring', label: 'Recurring?', ph: 'Is revenue recurring / sticky?' },
+            { id: 'rev_pricing', label: 'Pricing power', ph: 'Can they raise prices without losing customers?' },
+            { id: 'rev_topcust', label: 'Customer concentration', ph: 'Any single customer > 10% of revenue?' }
+          ] },
+          { title: 'Source reading', checklist: [
+            { id: 'src_10k', label: 'Read the 10-K / annual report “Business” section' },
+            { id: 'src_deck', label: 'Latest investor presentation' },
+            { id: 'src_calls', label: 'Listen to the last 2 earnings calls' },
+            { id: 'src_product', label: 'Try the product / read customer reviews' }
+          ] }
+        ]
+      },
+      {
+        id: 'mgmt', icon: '👤', title: 'Founder & Management', q: 'Would you trust them with your own money?',
+        groups: [
+          { title: 'Who’s driving', fields: [
+            { id: 'm_ceo', label: 'CEO', ph: 'Who runs it? Background?' },
+            { id: 'm_founder', label: 'Founder-led?', ph: 'Still founder-led? Tenure?' },
+            { id: 'm_track', label: 'Track record', ph: 'What have they built / delivered before?' }
+          ] },
+          { title: 'Skin in the game', fields: [
+            { id: 'm_own', label: 'Insider ownership', ph: '% owned by insiders' },
+            { id: 'm_buys', label: 'Insider buys/sells', ph: 'Recent Form 4 activity (size & direction)' },
+            { id: 'm_recent', label: 'Recent action', ph: 'Notable recent insider/institutional moves' }
+          ] },
+          { title: 'Capital allocation', fields: [
+            { id: 'm_history', label: 'History', ph: 'Buybacks, dividends, M&A — done well or poorly?' },
+            { id: 'm_promise', label: 'Promises / plan', ph: 'What have they said they’ll do with cash?' }
+          ] }
+        ]
+      },
+      {
+        id: 'financials', icon: '💹', title: 'Financials', q: 'Is the machine actually making money?',
+        auto: 'financials',
+        groups: [
+          { title: 'Income statement', fields: [
+            { id: 'f_revgrowth', label: 'Revenue growth', ph: 'YoY growth %, accelerating or slowing?' },
+            { id: 'f_gross', label: 'Gross margin', ph: 'Gross margin % and trend' },
+            { id: 'f_op', label: 'Operating margin', ph: 'Op. margin % and trend' },
+            { id: 'f_profit', label: 'Profitable?', ph: 'GAAP profit? Path to profitability?' }
+          ] },
+          { title: 'Balance sheet', fields: [
+            { id: 'f_cash', label: 'Cash vs debt', ph: 'Net cash or net debt?' },
+            { id: 'f_leverage', label: 'Debt / EBITDA', ph: 'Leverage ratio — manageable?' }
+          ] },
+          { title: 'Cash flow & quality', fields: [
+            { id: 'f_fcf', label: 'Free cash flow', ph: 'FCF positive? FCF margin?' },
+            { id: 'f_sbc', label: 'Stock-based comp', ph: 'SBC as % of revenue — dilution risk?' },
+            { id: 'f_returns', label: 'ROIC / ROE', ph: 'Returns on capital' }
+          ] }
+        ]
+      },
+      {
+        id: 'moat', icon: '🏰', title: 'Moat & Competition', q: 'Why can’t someone richer just copy this?',
+        groups: [
+          { title: 'Moat type', fields: [
+            { id: 'moat_network', label: 'Network effects', ph: 'Does it get better with more users?' },
+            { id: 'moat_switch', label: 'Switching costs', ph: 'Painful for customers to leave?' },
+            { id: 'moat_cost', label: 'Cost / scale advantage', ph: 'Cheaper at scale than rivals?' },
+            { id: 'moat_ip', label: 'IP / regulation', ph: 'Patents, licenses, regulatory barriers?' }
+          ] },
+          { title: 'The battlefield', fields: [
+            { id: 'comp_share', label: 'Market share', ph: 'Leader, challenger, or minnow?' },
+            { id: 'comp_1', label: 'Competitor 1', ph: 'Name & threat' },
+            { id: 'comp_2', label: 'Competitor 2', ph: 'Name & threat' },
+            { id: 'comp_3', label: 'Competitor 3', ph: 'Name & threat (incl. Big Tech)' }
+          ] },
+          { title: 'Reality checks', fields: [
+            { id: 'moat_power', label: 'Pricing power', ph: 'Proven ability to raise prices?' },
+            { id: 'moat_disrupt', label: 'Disruption risk', ph: 'Could it be disrupted (incl. by AI)?' }
+          ] }
+        ]
+      },
+      {
+        id: 'industry', icon: '🌊', title: 'Industry & Growth', q: 'Is the tide rising or falling?',
+        groups: [
+          { title: 'Market size', fields: [
+            { id: 'ind_tam', label: 'TAM', ph: 'Total addressable market $' },
+            { id: 'ind_growth', label: 'Industry growth', ph: 'Industry growing how fast?' },
+            { id: 'ind_room', label: 'Room to run', ph: 'How much penetration is left?' }
+          ] },
+          { title: 'Tailwinds / headwinds', fields: [
+            { id: 'ind_tail', label: 'Tailwinds', ph: 'Secular trends in its favor' },
+            { id: 'ind_head', label: 'Headwinds', ph: 'Trends working against it' },
+            { id: 'ind_cyclical', label: 'Cyclical?', ph: 'Sensitive to the economy / rates?' },
+            { id: 'ind_drivers', label: 'Growth drivers', ph: 'What specifically drives the next leg?' }
+          ] },
+          { title: 'Reality checks', fields: [
+            { id: 'ind_tamlegit', label: 'Is the TAM legit?', ph: 'Is management’s TAM realistic?' },
+            { id: 'ind_peers', label: 'Are peers growing?', ph: 'Is the whole space growing, or just them?' }
+          ] }
+        ]
+      },
+      {
+        id: 'valuation', icon: '⚖️', title: 'Valuation', q: 'Are you cheap or expensive? What’s the price?',
+        groups: [
+          { title: 'Multiples', fields: [
+            { id: 'v_pe', label: 'P/E', ph: 'vs history & peers' },
+            { id: 'v_evebitda', label: 'EV/EBITDA', ph: '' },
+            { id: 'v_pfcf', label: 'P/FCF', ph: '' },
+            { id: 'v_ps', label: 'P/S', ph: 'for unprofitable growth' }
+          ] },
+          { title: 'What’s priced in', fields: [
+            { id: 'v_implied', label: 'Implied expectations', ph: 'What growth must happen to justify today’s price?' }
+          ] },
+          { title: 'Scenarios', fields: [
+            { id: 'v_bear', label: 'Bear case ($)', ph: 'Downside price & why' },
+            { id: 'v_base', label: 'Base case ($)', ph: 'Most-likely price & why' },
+            { id: 'v_bull', label: 'Bull case ($)', ph: 'Upside price & why' }
+          ] }
+        ]
+      },
+      {
+        id: 'risks', icon: '🚩', title: 'Risks & Red Flags', q: 'How does this kill me?',
+        groups: [
+          { title: 'Business risks', fields: [
+            { id: 'r_biggest', label: 'Biggest risk', ph: 'The one thing that breaks the thesis' },
+            { id: 'r_keycust', label: 'Key-customer risk', ph: 'Dependence on one customer/partner' },
+            { id: 'r_concentration', label: 'Concentration', ph: 'Single product / supplier / geography risk' },
+            { id: 'r_reputation', label: 'Reputation / regulatory', ph: 'Legal, regulatory, headline risk' }
+          ] },
+          { title: 'Accounting red flags', checklist: [
+            { id: 'r_recv', label: 'Receivables growing faster than revenue?' },
+            { id: 'r_restate', label: 'Restatements / auditor change / late filing?' },
+            { id: 'r_adjusted', label: 'Heavy reliance on “adjusted” numbers?' },
+            { id: 'r_insider', label: 'Unusual insider selling?' },
+            { id: 'r_dilution', label: 'Rising share count / dilution?' }
+          ] },
+          { title: 'Steelman the bear', fields: [
+            { id: 'r_bear', label: 'Strongest bear argument', ph: 'Write the most convincing case AGAINST owning it.' }
+          ] }
+        ]
+      }
+    ]
+  };
+
+  window.BLUEPRINT = BLUEPRINT;
+})();
+
+</script>
+  <script>
+'use strict';
+
+/**
  * app.js — wires the chart, the data layer and the lesson curriculum into the
  * interactive tutor UI: symbol loading, lesson/step navigation, quizzes,
  * click-on-chart exercises and a free "Explore" sandbox.
@@ -4384,62 +4580,144 @@ body {
   function fmtBig(v) {
     return v == null ? '—' : v;
   }
-  async function renderResearch() {
-    const sym = state.symbol;
-    $('#rschSym').textContent = sym;
-    $('#rschLinkSym').textContent = sym;
-    $('#rschName').textContent = (state.data && state.data.name) || '';
-    // deep links (always available)
-    $('#rschLinks').innerHTML = researchLinks(sym)
-      .map(([label, url]) => `<a class="rsch-link" href="${url}" target="_blank" rel="noopener">${label} ↗</a>`)
-      .join('');
-    if (state._rschSym === sym) return; // already loaded this symbol's data
-    state._rschSym = sym;
-    const statsBox = $('#rschStats');
-    const filingsBox = $('#rschFilings');
-    const finBox = $('#rschFin');
-    const isFile = location.protocol === 'file:';
-    if (isFile) {
-      statsBox.innerHTML = '<div class="sig-sample">Start the live server for key stats, filings & financials.</div>';
-      filingsBox.innerHTML = '';
-      finBox.innerHTML = '';
+  // --- persistent research worksheet (the "blueprint") ---
+  const RES_KEY = 'chartSchool.research.v1';
+  let researchStore = null;
+  let resSaveTimer = null;
+  function loadResearchStore() {
+    if (researchStore) return researchStore;
+    try {
+      researchStore = JSON.parse(localStorage.getItem(RES_KEY) || '{}');
+    } catch (_) {
+      researchStore = {};
+    }
+    return researchStore;
+  }
+  function saveResearchStore() {
+    clearTimeout(resSaveTimer);
+    resSaveTimer = setTimeout(() => {
+      try {
+        localStorage.setItem(RES_KEY, JSON.stringify(researchStore));
+      } catch (_) {}
+    }, 400);
+  }
+  function getResearchRec(sym) {
+    const store = loadResearchStore();
+    if (!store[sym]) store[sym] = { date: new Date().toLocaleDateString(), fields: {}, checks: {}, notes: '', auto: null, edgar: null };
+    const r = store[sym];
+    r.fields = r.fields || {};
+    r.checks = r.checks || {};
+    return r;
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function autoGrow(t) {
+    t.style.height = 'auto';
+    t.style.height = Math.min(180, Math.max(30, t.scrollHeight)) + 'px';
+  }
+  function renderAutoStats(auto) {
+    const box = $('#rschStats');
+    if (!auto) {
+      box.innerHTML = location.protocol === 'file:' ? '<div class="ctrl-note">Start the live server for key stats & SEC data.</div>' : '<div class="ctrl-note">Loading key stats…</div>';
       return;
     }
-    statsBox.innerHTML = '<div class="sig-loading">Loading key stats…</div>';
-    filingsBox.innerHTML = '<div class="sig-loading">Loading filings…</div>';
-    finBox.innerHTML = '';
-    // key stats
+    const rows = window.BLUEPRINT.stats.map((s) => [s.label, auto[s.key]]).filter((r) => r[1] != null && r[1] !== '' && r[1] !== '—');
+    box.innerHTML = rows.length ? rows.map(([k, v]) => `<div class="rsch-stat"><span>${k}</span><b>${esc(v)}</b></div>`).join('') : '<div class="ctrl-note">Key stats unavailable for this ticker.</div>';
+  }
+  function bpGroupHtml(g, rec) {
+    if (g.checklist) {
+      const items = g.checklist.map((it) => `<label class="bp-check"><input type="checkbox" data-cid="${it.id}" ${rec.checks[it.id] ? 'checked' : ''}/><span>${it.label}</span></label>`).join('');
+      return `<div class="bp-group"><h4>${g.title}</h4>${items}</div>`;
+    }
+    const fields = g.fields.map((f) => `<label class="bp-field"><span>${f.label}</span><textarea data-fid="${f.id}" rows="1" placeholder="${esc(f.ph || '')}">${esc(rec.fields[f.id] || '')}</textarea></label>`).join('');
+    return `<div class="bp-group"><h4>${g.title}</h4>${fields}</div>`;
+  }
+  function bpSectionHtml(sec, rec) {
+    const auto = sec.auto === 'financials' ? '<div id="bpAutoFin" class="bp-auto"></div>' : '';
+    return `<details class="bp-sec" open><summary class="bp-sec-head"><span>${sec.icon} ${sec.title}</span><i>${sec.q}</i></summary>${auto}${sec.groups.map((g) => bpGroupHtml(g, rec)).join('')}</details>`;
+  }
+  function renderFinancialsAuto(e) {
+    const box = document.getElementById('bpAutoFin');
+    if (!box) return;
+    if (!e) {
+      box.innerHTML = '<div class="ctrl-note">SEC financials unavailable (US-listed companies only).</div>';
+      return;
+    }
+    const filings = e.filings && e.filings.length
+      ? e.filings.slice(0, 6).map((f) => `<a class="rsch-filing" href="${f.url}" target="_blank" rel="noopener"><span class="rsch-form">${f.form}</span><span class="rsch-fdate">${f.date}</span><span class="rsch-fdesc">${esc(f.desc || '')}</span></a>`).join('')
+      : '<div class="ctrl-note">No recent filings.</div>';
+    box.innerHTML = `<div class="bp-auto-h">⚙ Auto · from SEC EDGAR</div>${renderFinancials(e.financials)}<div class="rsch-filings">${filings}${e.edgarUrl ? `<a class="rsch-link" href="${e.edgarUrl}" target="_blank" rel="noopener">All filings ↗</a>` : ''}</div>`;
+  }
+  function renderBlueprintBody(rec) {
+    const body = $('#blueprintBody');
+    body.innerHTML =
+      window.BLUEPRINT.sections.map((sec) => bpSectionHtml(sec, rec)).join('') +
+      `<details class="bp-sec" open><summary class="bp-sec-head"><span>📝 Notes</span></summary><div class="bp-group"><textarea class="bp-note" data-note="1" rows="3" placeholder="Free-form notes…">${esc(rec.notes || '')}</textarea></div></details>`;
+    body.querySelectorAll('textarea[data-fid]').forEach((t) => {
+      autoGrow(t);
+      t.addEventListener('input', () => {
+        rec.fields[t.dataset.fid] = t.value;
+        autoGrow(t);
+        saveResearchStore();
+      });
+    });
+    body.querySelectorAll('input[data-cid]').forEach((c) =>
+      c.addEventListener('change', () => {
+        rec.checks[c.dataset.cid] = c.checked;
+        saveResearchStore();
+      })
+    );
+    const note = body.querySelector('textarea[data-note]');
+    if (note) {
+      autoGrow(note);
+      note.addEventListener('input', () => {
+        rec.notes = note.value;
+        autoGrow(note);
+        saveResearchStore();
+      });
+    }
+    if (rec.edgar) renderFinancialsAuto(rec.edgar);
+  }
+  function renderResearch() {
+    const sym = state.symbol;
+    const rec = getResearchRec(sym);
+    $('#rschSym').textContent = sym;
+    $('#rschName').textContent = (state.data && state.data.name) || rec.name || '';
+    $('#rschDate').textContent = 'Worksheet started ' + rec.date + ' · auto-saved on this device';
+    $('#rschLinks').innerHTML = researchLinks(sym).map(([label, url]) => `<a class="rsch-link" href="${url}" target="_blank" rel="noopener">${label} ↗</a>`).join('');
+    renderAutoStats(rec.auto);
+    renderBlueprintBody(rec);
+    if (state._rschSym !== sym || !rec.auto) {
+      state._rschSym = sym;
+      fetchResearchData(sym, rec);
+    }
+  }
+  async function fetchResearchData(sym, rec) {
+    if (location.protocol === 'file:') return;
     try {
       const p = await window.MarketData.profile(sym);
       if (sym !== state.symbol) return;
-      const rows = [
-        ['Price', p.price != null ? Number(p.price).toFixed(2) : '—'],
-        ['Market cap', fmtBig(p.marketCap)],
-        ['P/E', fmtBig(p.peRatio)],
-        ['Fwd P/E', fmtBig(p.forwardPE)],
-        ['EPS', fmtBig(p.eps)],
-        ['Sector', fmtBig(p.sector)],
-        ['Industry', fmtBig(p.industry)],
-        ['52-wk', fmtBig(p.week52)],
-        ['1-yr target', fmtBig(p.oneYrTarget)]
-      ].filter((r) => r[1] !== '—');
-      statsBox.innerHTML = rows.map(([k, v]) => `<div class="rsch-stat"><span>${k}</span><b>${v}</b></div>`).join('') || '<div class="sig-error">Key stats unavailable for ' + sym + '.</div>';
+      rec.auto = {
+        price: p.price != null ? Number(p.price).toFixed(2) : null,
+        marketCap: p.marketCap, sector: p.sector, industry: p.industry, exchange: p.exchange,
+        avgVolume: p.avgVolume, week52: p.week52, peRatio: p.peRatio, forwardPE: p.forwardPE,
+        yield: p.yield, eps: p.eps, oneYrTarget: p.oneYrTarget
+      };
+      renderAutoStats(rec.auto);
+      saveResearchStore();
     } catch (_) {
-      statsBox.innerHTML = '<div class="sig-error">Key stats unavailable.</div>';
+      if (!rec.auto) renderAutoStats({});
     }
-    // SEC EDGAR
     try {
       const e = await window.MarketData.edgar(sym);
       if (sym !== state.symbol) return;
-      filingsBox.innerHTML =
-        (e.filings && e.filings.length
-          ? e.filings.map((f) => `<a class="rsch-filing" href="${f.url}" target="_blank" rel="noopener"><span class="rsch-form">${f.form}</span><span class="rsch-fdate">${f.date}</span><span class="rsch-fdesc">${f.desc || ''}</span></a>`).join('')
-          : '<div class="ctrl-note">No recent filings found.</div>') +
-        (e.edgarUrl ? `<a class="rsch-link" href="${e.edgarUrl}" target="_blank" rel="noopener">All filings on EDGAR ↗</a>` : '');
-      finBox.innerHTML = renderFinancials(e.financials);
-    } catch (err) {
-      filingsBox.innerHTML = `<div class="ctrl-note">${(err && err.message) || 'No SEC data'} (US-listed companies only).</div>`;
-      finBox.innerHTML = '';
+      rec.name = e.name || rec.name;
+      rec.edgar = { name: e.name, filings: e.filings, financials: e.financials, edgarUrl: e.edgarUrl };
+      renderFinancialsAuto(rec.edgar);
+      saveResearchStore();
+    } catch (_) {
+      renderFinancialsAuto(null);
     }
   }
   function abbrNum(n) {
@@ -4454,10 +4732,7 @@ body {
     if (!fin || (!fin.revenue.length && !fin.netIncome.length && !fin.eps.length)) return '<div class="ctrl-note">Financial facts not available.</div>';
     const line = (label, arr, money) => {
       if (!arr || !arr.length) return '';
-      const cells = arr.map((x) => `<span><i>${x.fy}</i>${money ? '
-</body>
-</html>
- + abbrNum(x.val) : x.val.toFixed(2)}</span>`).join('');
+      const cells = arr.map((x) => `<span><i>${x.fy}</i>${money ? '$' + abbrNum(x.val) : x.val.toFixed(2)}</span>`).join('');
       return `<div class="rsch-finrow"><b>${label}</b><div class="rsch-fincells">${cells}</div></div>`;
     };
     return line('Revenue', fin.revenue, true) + line('Net income', fin.netIncome, true) + line('Diluted EPS', fin.eps, false);

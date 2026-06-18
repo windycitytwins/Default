@@ -252,6 +252,31 @@ body {
 .rsch-fincells span { background: #0e1424; border: 1px solid var(--border); border-radius: 7px; padding: 5px 8px; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .rsch-fincells i { display: block; font-style: normal; font-size: 9.5px; color: var(--muted); font-weight: 400; }
 
+/* ---------- research blueprint ---------- */
+.bp-header { display: flex; flex-direction: column; gap: 8px; }
+.bp-title { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.bp-title h2 { margin: 0; font-size: 19px; }
+.bp-date { font-size: 11px; color: var(--muted); }
+.bp-body { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.bp-sec { border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); overflow: hidden; }
+.bp-sec-head { list-style: none; cursor: pointer; padding: 11px 13px; display: flex; flex-direction: column; gap: 2px; }
+.bp-sec-head::-webkit-details-marker { display: none; }
+.bp-sec-head span { font-size: 13.5px; font-weight: 700; }
+.bp-sec-head i { font-size: 11.5px; color: var(--accent-2); font-style: italic; }
+.bp-sec[open] .bp-sec-head { border-bottom: 1px solid var(--border); }
+.bp-group { padding: 10px 13px; border-top: 1px solid rgba(255,255,255,0.03); }
+.bp-group:first-of-type { border-top: none; }
+.bp-group h4 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+.bp-field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 9px; }
+.bp-field > span { font-size: 12px; font-weight: 600; color: #cfd6e6; }
+.bp-field textarea, .bp-note { width: 100%; resize: none; box-sizing: border-box; background: #0e1424; border: 1px solid var(--border); border-radius: 7px; color: var(--text); font-family: inherit; font-size: 12.5px; padding: 7px 9px; outline: none; overflow: hidden; line-height: 1.4; }
+.bp-field textarea:focus, .bp-note:focus { border-color: var(--accent); }
+.bp-field textarea::placeholder, .bp-note::placeholder { color: #56607a; }
+.bp-check { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; font-size: 12.5px; cursor: pointer; color: #cfd6e6; }
+.bp-check input { margin-top: 2px; accent-color: var(--accent); flex-shrink: 0; }
+.bp-auto { padding: 10px 13px; border-top: 1px solid var(--border); background: rgba(91,140,255,0.05); }
+.bp-auto-h { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent-2); margin-bottom: 8px; }
+
 /* ---------- markets heat map ---------- */
 .mkt-map { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .mkt-tile { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--border); cursor: pointer; text-align: left; color: var(--text); }

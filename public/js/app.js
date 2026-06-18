@@ -578,62 +578,144 @@
   function fmtBig(v) {
     return v == null ? '—' : v;
   }
-  async function renderResearch() {
-    const sym = state.symbol;
-    $('#rschSym').textContent = sym;
-    $('#rschLinkSym').textContent = sym;
-    $('#rschName').textContent = (state.data && state.data.name) || '';
-    // deep links (always available)
-    $('#rschLinks').innerHTML = researchLinks(sym)
-      .map(([label, url]) => `<a class="rsch-link" href="${url}" target="_blank" rel="noopener">${label} ↗</a>`)
-      .join('');
-    if (state._rschSym === sym) return; // already loaded this symbol's data
-    state._rschSym = sym;
-    const statsBox = $('#rschStats');
-    const filingsBox = $('#rschFilings');
-    const finBox = $('#rschFin');
-    const isFile = location.protocol === 'file:';
-    if (isFile) {
-      statsBox.innerHTML = '<div class="sig-sample">Start the live server for key stats, filings & financials.</div>';
-      filingsBox.innerHTML = '';
-      finBox.innerHTML = '';
+  // --- persistent research worksheet (the "blueprint") ---
+  const RES_KEY = 'chartSchool.research.v1';
+  let researchStore = null;
+  let resSaveTimer = null;
+  function loadResearchStore() {
+    if (researchStore) return researchStore;
+    try {
+      researchStore = JSON.parse(localStorage.getItem(RES_KEY) || '{}');
+    } catch (_) {
+      researchStore = {};
+    }
+    return researchStore;
+  }
+  function saveResearchStore() {
+    clearTimeout(resSaveTimer);
+    resSaveTimer = setTimeout(() => {
+      try {
+        localStorage.setItem(RES_KEY, JSON.stringify(researchStore));
+      } catch (_) {}
+    }, 400);
+  }
+  function getResearchRec(sym) {
+    const store = loadResearchStore();
+    if (!store[sym]) store[sym] = { date: new Date().toLocaleDateString(), fields: {}, checks: {}, notes: '', auto: null, edgar: null };
+    const r = store[sym];
+    r.fields = r.fields || {};
+    r.checks = r.checks || {};
+    return r;
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function autoGrow(t) {
+    t.style.height = 'auto';
+    t.style.height = Math.min(180, Math.max(30, t.scrollHeight)) + 'px';
+  }
+  function renderAutoStats(auto) {
+    const box = $('#rschStats');
+    if (!auto) {
+      box.innerHTML = location.protocol === 'file:' ? '<div class="ctrl-note">Start the live server for key stats & SEC data.</div>' : '<div class="ctrl-note">Loading key stats…</div>';
       return;
     }
-    statsBox.innerHTML = '<div class="sig-loading">Loading key stats…</div>';
-    filingsBox.innerHTML = '<div class="sig-loading">Loading filings…</div>';
-    finBox.innerHTML = '';
-    // key stats
+    const rows = window.BLUEPRINT.stats.map((s) => [s.label, auto[s.key]]).filter((r) => r[1] != null && r[1] !== '' && r[1] !== '—');
+    box.innerHTML = rows.length ? rows.map(([k, v]) => `<div class="rsch-stat"><span>${k}</span><b>${esc(v)}</b></div>`).join('') : '<div class="ctrl-note">Key stats unavailable for this ticker.</div>';
+  }
+  function bpGroupHtml(g, rec) {
+    if (g.checklist) {
+      const items = g.checklist.map((it) => `<label class="bp-check"><input type="checkbox" data-cid="${it.id}" ${rec.checks[it.id] ? 'checked' : ''}/><span>${it.label}</span></label>`).join('');
+      return `<div class="bp-group"><h4>${g.title}</h4>${items}</div>`;
+    }
+    const fields = g.fields.map((f) => `<label class="bp-field"><span>${f.label}</span><textarea data-fid="${f.id}" rows="1" placeholder="${esc(f.ph || '')}">${esc(rec.fields[f.id] || '')}</textarea></label>`).join('');
+    return `<div class="bp-group"><h4>${g.title}</h4>${fields}</div>`;
+  }
+  function bpSectionHtml(sec, rec) {
+    const auto = sec.auto === 'financials' ? '<div id="bpAutoFin" class="bp-auto"></div>' : '';
+    return `<details class="bp-sec" open><summary class="bp-sec-head"><span>${sec.icon} ${sec.title}</span><i>${sec.q}</i></summary>${auto}${sec.groups.map((g) => bpGroupHtml(g, rec)).join('')}</details>`;
+  }
+  function renderFinancialsAuto(e) {
+    const box = document.getElementById('bpAutoFin');
+    if (!box) return;
+    if (!e) {
+      box.innerHTML = '<div class="ctrl-note">SEC financials unavailable (US-listed companies only).</div>';
+      return;
+    }
+    const filings = e.filings && e.filings.length
+      ? e.filings.slice(0, 6).map((f) => `<a class="rsch-filing" href="${f.url}" target="_blank" rel="noopener"><span class="rsch-form">${f.form}</span><span class="rsch-fdate">${f.date}</span><span class="rsch-fdesc">${esc(f.desc || '')}</span></a>`).join('')
+      : '<div class="ctrl-note">No recent filings.</div>';
+    box.innerHTML = `<div class="bp-auto-h">⚙ Auto · from SEC EDGAR</div>${renderFinancials(e.financials)}<div class="rsch-filings">${filings}${e.edgarUrl ? `<a class="rsch-link" href="${e.edgarUrl}" target="_blank" rel="noopener">All filings ↗</a>` : ''}</div>`;
+  }
+  function renderBlueprintBody(rec) {
+    const body = $('#blueprintBody');
+    body.innerHTML =
+      window.BLUEPRINT.sections.map((sec) => bpSectionHtml(sec, rec)).join('') +
+      `<details class="bp-sec" open><summary class="bp-sec-head"><span>📝 Notes</span></summary><div class="bp-group"><textarea class="bp-note" data-note="1" rows="3" placeholder="Free-form notes…">${esc(rec.notes || '')}</textarea></div></details>`;
+    body.querySelectorAll('textarea[data-fid]').forEach((t) => {
+      autoGrow(t);
+      t.addEventListener('input', () => {
+        rec.fields[t.dataset.fid] = t.value;
+        autoGrow(t);
+        saveResearchStore();
+      });
+    });
+    body.querySelectorAll('input[data-cid]').forEach((c) =>
+      c.addEventListener('change', () => {
+        rec.checks[c.dataset.cid] = c.checked;
+        saveResearchStore();
+      })
+    );
+    const note = body.querySelector('textarea[data-note]');
+    if (note) {
+      autoGrow(note);
+      note.addEventListener('input', () => {
+        rec.notes = note.value;
+        autoGrow(note);
+        saveResearchStore();
+      });
+    }
+    if (rec.edgar) renderFinancialsAuto(rec.edgar);
+  }
+  function renderResearch() {
+    const sym = state.symbol;
+    const rec = getResearchRec(sym);
+    $('#rschSym').textContent = sym;
+    $('#rschName').textContent = (state.data && state.data.name) || rec.name || '';
+    $('#rschDate').textContent = 'Worksheet started ' + rec.date + ' · auto-saved on this device';
+    $('#rschLinks').innerHTML = researchLinks(sym).map(([label, url]) => `<a class="rsch-link" href="${url}" target="_blank" rel="noopener">${label} ↗</a>`).join('');
+    renderAutoStats(rec.auto);
+    renderBlueprintBody(rec);
+    if (state._rschSym !== sym || !rec.auto) {
+      state._rschSym = sym;
+      fetchResearchData(sym, rec);
+    }
+  }
+  async function fetchResearchData(sym, rec) {
+    if (location.protocol === 'file:') return;
     try {
       const p = await window.MarketData.profile(sym);
       if (sym !== state.symbol) return;
-      const rows = [
-        ['Price', p.price != null ? Number(p.price).toFixed(2) : '—'],
-        ['Market cap', fmtBig(p.marketCap)],
-        ['P/E', fmtBig(p.peRatio)],
-        ['Fwd P/E', fmtBig(p.forwardPE)],
-        ['EPS', fmtBig(p.eps)],
-        ['Sector', fmtBig(p.sector)],
-        ['Industry', fmtBig(p.industry)],
-        ['52-wk', fmtBig(p.week52)],
-        ['1-yr target', fmtBig(p.oneYrTarget)]
-      ].filter((r) => r[1] !== '—');
-      statsBox.innerHTML = rows.map(([k, v]) => `<div class="rsch-stat"><span>${k}</span><b>${v}</b></div>`).join('') || '<div class="sig-error">Key stats unavailable for ' + sym + '.</div>';
+      rec.auto = {
+        price: p.price != null ? Number(p.price).toFixed(2) : null,
+        marketCap: p.marketCap, sector: p.sector, industry: p.industry, exchange: p.exchange,
+        avgVolume: p.avgVolume, week52: p.week52, peRatio: p.peRatio, forwardPE: p.forwardPE,
+        yield: p.yield, eps: p.eps, oneYrTarget: p.oneYrTarget
+      };
+      renderAutoStats(rec.auto);
+      saveResearchStore();
     } catch (_) {
-      statsBox.innerHTML = '<div class="sig-error">Key stats unavailable.</div>';
+      if (!rec.auto) renderAutoStats({});
     }
-    // SEC EDGAR
     try {
       const e = await window.MarketData.edgar(sym);
       if (sym !== state.symbol) return;
-      filingsBox.innerHTML =
-        (e.filings && e.filings.length
-          ? e.filings.map((f) => `<a class="rsch-filing" href="${f.url}" target="_blank" rel="noopener"><span class="rsch-form">${f.form}</span><span class="rsch-fdate">${f.date}</span><span class="rsch-fdesc">${f.desc || ''}</span></a>`).join('')
-          : '<div class="ctrl-note">No recent filings found.</div>') +
-        (e.edgarUrl ? `<a class="rsch-link" href="${e.edgarUrl}" target="_blank" rel="noopener">All filings on EDGAR ↗</a>` : '');
-      finBox.innerHTML = renderFinancials(e.financials);
-    } catch (err) {
-      filingsBox.innerHTML = `<div class="ctrl-note">${(err && err.message) || 'No SEC data'} (US-listed companies only).</div>`;
-      finBox.innerHTML = '';
+      rec.name = e.name || rec.name;
+      rec.edgar = { name: e.name, filings: e.filings, financials: e.financials, edgarUrl: e.edgarUrl };
+      renderFinancialsAuto(rec.edgar);
+      saveResearchStore();
+    } catch (_) {
+      renderFinancialsAuto(null);
     }
   }
   function abbrNum(n) {

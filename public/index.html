@@ -212,22 +212,16 @@
 
       <!-- RESEARCH -->
       <div id="researchView" class="tutor-view" style="display:none">
-        <div class="rsch-head"><h2 id="rschSym">—</h2><span id="rschName" class="rsch-name"></span></div>
-        <div id="rschStats" class="rsch-stats"></div>
-        <div class="control-group">
-          <h3>Quick links for <span id="rschLinkSym">—</span></h3>
+        <div class="bp-header">
+          <div class="bp-title"><h2 id="rschSym">—</h2><span id="rschName" class="rsch-name"></span></div>
+          <div id="rschDate" class="bp-date"></div>
+          <div id="rschStats" class="rsch-stats"></div>
           <div id="rschLinks" class="rsch-links"></div>
         </div>
-        <div class="control-group">
-          <h3>SEC filings <small>(EDGAR)</small></h3>
-          <div id="rschFilings" class="rsch-filings"></div>
-        </div>
-        <div class="control-group">
-          <h3>Financials <small>(annual, from 10-Ks)</small></h3>
-          <div id="rschFin" class="rsch-fin"></div>
-        </div>
-        <p class="disclaimer">Key stats are best-effort from Nasdaq; filings &amp; financials are
-          from the SEC's free EDGAR API. May be delayed or incomplete. Educational, not advice.</p>
+        <div id="blueprintBody" class="bp-body"></div>
+        <p class="disclaimer">A research worksheet — it auto-fills the hard data it can fetch; you
+          fill in the analysis. Everything is <b>saved per ticker on this device</b>. Verify before
+          acting. Educational, not financial advice.</p>
       </div>
 
       <!-- MARKETS -->
@@ -258,6 +252,7 @@
   <script src="js/analysis.js"></script>
   <script src="js/screener.js"></script>
   <script src="js/glossary.js"></script>
+  <script src="js/blueprint.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
