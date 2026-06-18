@@ -1061,14 +1061,15 @@
     document.querySelectorAll('.chip[data-sym]').forEach((c) =>
       c.addEventListener('click', () => loadSymbol(c.dataset.sym))
     );
-    $('#rangeSelect').addEventListener('change', (e) => {
+    $('#rangeSelect').addEventListener('change', async (e) => {
       const v = e.target.value;
       const map = {
         '1d': ['1d', '2m'], '5d': ['5d', '15m'], '1mo': ['1mo', '30m'],
         '6mo': ['6mo', '1d'], '1y': ['1y', '1d'], '5y': ['5y', '1wk'], 'max': ['max', '1mo']
       };
       [state.range, state.interval] = map[v] || ['1y', '1d'];
-      loadSymbol(state.symbol);
+      await loadSymbol(state.symbol);
+      chart.showAll(); // fit the full selected range so the change is visible
     });
 
     $('#tabLessons').addEventListener('click', () => {

@@ -650,6 +650,38 @@ function providersFor(interval) {
   }
   return list;
 }
+// Resample daily candles into weekly/monthly/quarterly OHLCV (for the keyless
+// daily sources, which ignore the requested interval).
+function periodKey(ms, interval) {
+  const d = new Date(ms);
+  const y = d.getUTCFullYear();
+  if (interval === '1mo') return y * 12 + d.getUTCMonth();
+  if (interval === '3mo') return y * 4 + Math.floor(d.getUTCMonth() / 3);
+  const week = Math.floor((Date.UTC(y, d.getUTCMonth(), d.getUTCDate()) - Date.UTC(y, 0, 1)) / (7 * 86400000));
+  return y * 53 + week; // 1wk
+}
+function aggregateCandles(candles, interval) {
+  if (!candles || !candles.length) return candles;
+  const out = [];
+  let cur = null;
+  let curKey = null;
+  for (const c of candles) {
+    const k = periodKey(c.time, interval);
+    if (k !== curKey) {
+      if (cur) out.push(cur);
+      cur = { time: c.time, open: c.open, high: c.high, low: c.low, close: c.close, adjclose: c.adjclose, volume: c.volume || 0 };
+      curKey = k;
+    } else {
+      if (c.high > cur.high) cur.high = c.high;
+      if (c.low < cur.low) cur.low = c.low;
+      cur.close = c.close;
+      cur.adjclose = c.adjclose;
+      cur.volume += c.volume || 0;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
 async function loadChart(symbol, range, interval, noQuote) {
   const key = `${symbol}|${range}|${interval}|${noQuote ? 'nq' : 'q'}`;
   const hit = cacheGet(key);
@@ -659,6 +691,12 @@ async function loadChart(symbol, range, interval, noQuote) {
     try {
       const data = await fn(symbol, range, interval);
       if (errors.length) data.note = 'Primary source busy; served by ' + data.source + '.';
+      // If a daily-only source (Nasdaq/Stooq) was used for a weekly/monthly
+      // request, resample the candles so the timeframe is actually honoured.
+      if (['1wk', '1mo', '3mo'].includes(interval) && data.interval !== interval) {
+        data.candles = aggregateCandles(data.candles, interval);
+        data.interval = interval;
+      }
       // Daily sources (Nasdaq/Stooq) only have completed bars — enrich with a
       // live quote so the header shows the CURRENT price, not yesterday's close.
       // (Skipped for bulk screener requests via noQuote to halve provider calls.)
@@ -813,4 +851,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { fromYahoo, fromStooq, fromNasdaq, fromNasdaqIntraday, fromNasdaqQuote, getQuote, fromTwelveData, fromNasdaqSummary, profileReport, edgarReport, aiResearch, extractJsonObject, searchSymbols, loadChart, diagnose, applyAdjustment, getYahooAuth };
+module.exports = { fromYahoo, fromStooq, fromNasdaq, fromNasdaqIntraday, fromNasdaqQuote, getQuote, fromTwelveData, fromNasdaqSummary, profileReport, edgarReport, aiResearch, extractJsonObject, aggregateCandles, searchSymbols, loadChart, diagnose, applyAdjustment, getYahooAuth };

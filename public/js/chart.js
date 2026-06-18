@@ -252,6 +252,13 @@
       this.visStart = Math.max(0, this.candles.length - this.visCount);
       this.requestRender();
     }
+    /** Fit the whole loaded dataset into view (used when changing timeframe). */
+    showAll() {
+      if (!this.candles.length) return;
+      this.visStart = 0;
+      this.visCount = this.candles.length;
+      this.requestRender();
+    }
 
     // ---- geometry helpers --------------------------------------------------
     _layout() {
