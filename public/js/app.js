@@ -24,7 +24,7 @@
     lessonIdx: 0,
     stepIdx: 0,
     view: 'lessons',
-    explore: { mode: 'candles', emaband: true, ema9: false, ema21: false, ema50: true, ma20: true, ma50: true, ma100: true, ma200: true, bb: false, vwap: false, volume: true, rsi: false, macd: false, sr: false, log: false, ew: false }
+    explore: { mode: 'candles', emaband: true, ema9: false, ema21: false, ema50: true, ma20: true, ma50: true, ma100: true, ma200: true, bb: false, vwap: false, volume: true, rsi: false, macd: false, sr: false, log: false, ew: false, ewPct: null }
   };
 
   let chart;
@@ -474,14 +474,32 @@
         });
       });
     }
-    if (ex.ew && window.Waves) {
-      const w = window.Waves.detect(candles);
-      if (w.pivots && w.pivots.length >= 2) chart.setPolyline('zz', { points: w.pivots.map((p) => ({ i: p.i, price: p.price })), color: 'rgba(180,200,255,0.4)', width: 1.2 });
-      if (w.found && w.waves) chart.setMarkers(w.waves.map((wv) => ({ index: wv.i, side: wv.type === 'H' ? 'above' : 'below', color: wv.type === 'H' ? '#46b3ff' : '#e0566a', text: wv.label })));
-      renderEwRead(w);
-    } else {
-      renderEwRead(null);
+    const ewControls = $('#ewControls');
+    if (ewControls) ewControls.style.display = ex.ew ? 'block' : 'none';
+    if (ex.ew && window.Waves) applyElliottWave();
+    else renderEwRead(null);
+  }
+
+  // Detect + draw the Elliott Wave count at the current (auto or manual) swing %.
+  function applyElliottWave() {
+    if (!state.data || !window.Waves) return;
+    const ex = state.explore;
+    const w = window.Waves.detect(state.data.candles, ex.ewPct ? { pct: ex.ewPct } : {});
+    if (w.pivots && w.pivots.length >= 2) chart.setPolyline('zz', { points: w.pivots.map((p) => ({ i: p.i, price: p.price })), color: 'rgba(180,200,255,0.4)', width: 1.2 });
+    else chart.clearPolylines();
+    chart.setMarkers(w.found && w.waves ? w.waves.map((wv) => ({ index: wv.i, side: wv.type === 'H' ? 'above' : 'below', color: wv.type === 'H' ? '#46b3ff' : '#e0566a', text: wv.label })) : []);
+    const slider = $('#ewSensitivity');
+    const val = $('#ewSensVal');
+    if (slider && val) {
+      const usedPct = Math.round((w.pct || 0.08) * 100);
+      if (ex.ewPct == null) {
+        slider.value = usedPct;
+        val.textContent = 'auto (' + usedPct + '%)';
+      } else {
+        val.textContent = slider.value + '%';
+      }
     }
+    renderEwRead(w);
   }
 
   function renderEwRead(w) {
@@ -1146,6 +1164,17 @@
     });
 
     $('#resetViewBtn').addEventListener('click', () => chart.resetView());
+
+    // Elliott Wave sensitivity slider
+    $('#ewSensitivity').addEventListener('input', () => {
+      state.explore.ewPct = +$('#ewSensitivity').value / 100;
+      $('#ewSensVal').textContent = $('#ewSensitivity').value + '%';
+      applyElliottWave();
+    });
+    $('#ewAutoBtn').addEventListener('click', () => {
+      state.explore.ewPct = null;
+      applyElliottWave();
+    });
 
     // adjusted-prices toggle (requires a reload)
     const adj = $('#adjustedToggle');

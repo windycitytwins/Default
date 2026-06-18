@@ -157,6 +157,17 @@
           <label class="switch"><input type="checkbox" data-toggle="volume" checked /><span>Volume</span></label>
           <label class="switch"><input type="checkbox" data-toggle="sr" /><span>Auto support/resistance zones</span></label>
           <label class="switch"><input type="checkbox" data-toggle="ew" /><span>🌊 Elliott Wave auto-count (beta)</span></label>
+          <div id="ewControls" class="ew-controls" style="display:none">
+            <div class="ew-slider-row">
+              <span>Wave sensitivity</span>
+              <b id="ewSensVal">auto</b>
+            </div>
+            <div class="ew-slider-row">
+              <input id="ewSensitivity" type="range" min="3" max="25" step="1" value="8" />
+              <button id="ewAutoBtn" class="ew-auto-btn">Auto</button>
+            </div>
+            <p class="ctrl-note">Lower % = finer sub-waves; higher % = bigger-degree structure.</p>
+          </div>
         </div>
 
         <div id="ewRead" class="ew-read" style="display:none"></div>

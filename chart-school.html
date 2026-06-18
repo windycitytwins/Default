@@ -334,6 +334,15 @@ body {
 .bp-field.ai textarea { border-color: rgba(125,91,255,0.45); background: rgba(125,91,255,0.06); }
 .ai-tag { font-style: normal; font-size: 9px; font-weight: 700; background: rgba(125,91,255,0.25); color: #c3b0ff; padding: 1px 5px; border-radius: 4px; vertical-align: middle; }
 
+/* ---------- elliott wave sensitivity ---------- */
+.ew-controls { margin-top: 8px; padding: 9px 11px; background: #0e1424; border: 1px solid var(--border); border-radius: 9px; }
+.ew-slider-row { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; }
+.ew-slider-row span { font-size: 12px; color: var(--muted); }
+.ew-slider-row b { margin-left: auto; font-size: 12px; color: var(--accent-2); font-variant-numeric: tabular-nums; }
+#ewSensitivity { flex: 1; accent-color: var(--accent); cursor: pointer; }
+.ew-auto-btn { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 7px; cursor: pointer; }
+.ew-auto-btn:hover { border-color: var(--accent); }
+
 /* ---------- elliott wave read ---------- */
 .ew-read { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 13px; }
 .ew-h { font-size: 13px; font-weight: 700; margin-bottom: 7px; }
@@ -758,6 +767,17 @@ body {
           <label class="switch"><input type="checkbox" data-toggle="volume" checked /><span>Volume</span></label>
           <label class="switch"><input type="checkbox" data-toggle="sr" /><span>Auto support/resistance zones</span></label>
           <label class="switch"><input type="checkbox" data-toggle="ew" /><span>🌊 Elliott Wave auto-count (beta)</span></label>
+          <div id="ewControls" class="ew-controls" style="display:none">
+            <div class="ew-slider-row">
+              <span>Wave sensitivity</span>
+              <b id="ewSensVal">auto</b>
+            </div>
+            <div class="ew-slider-row">
+              <input id="ewSensitivity" type="range" min="3" max="25" step="1" value="8" />
+              <button id="ewAutoBtn" class="ew-auto-btn">Auto</button>
+            </div>
+            <p class="ctrl-note">Lower % = finer sub-waves; higher % = bigger-degree structure.</p>
+          </div>
         </div>
 
         <div id="ewRead" class="ew-read" style="display:none"></div>
@@ -4435,7 +4455,7 @@ body {
     lessonIdx: 0,
     stepIdx: 0,
     view: 'lessons',
-    explore: { mode: 'candles', emaband: true, ema9: false, ema21: false, ema50: true, ma20: true, ma50: true, ma100: true, ma200: true, bb: false, vwap: false, volume: true, rsi: false, macd: false, sr: false, log: false, ew: false }
+    explore: { mode: 'candles', emaband: true, ema9: false, ema21: false, ema50: true, ma20: true, ma50: true, ma100: true, ma200: true, bb: false, vwap: false, volume: true, rsi: false, macd: false, sr: false, log: false, ew: false, ewPct: null }
   };
 
   let chart;
@@ -4885,14 +4905,32 @@ body {
         });
       });
     }
-    if (ex.ew && window.Waves) {
-      const w = window.Waves.detect(candles);
-      if (w.pivots && w.pivots.length >= 2) chart.setPolyline('zz', { points: w.pivots.map((p) => ({ i: p.i, price: p.price })), color: 'rgba(180,200,255,0.4)', width: 1.2 });
-      if (w.found && w.waves) chart.setMarkers(w.waves.map((wv) => ({ index: wv.i, side: wv.type === 'H' ? 'above' : 'below', color: wv.type === 'H' ? '#46b3ff' : '#e0566a', text: wv.label })));
-      renderEwRead(w);
-    } else {
-      renderEwRead(null);
+    const ewControls = $('#ewControls');
+    if (ewControls) ewControls.style.display = ex.ew ? 'block' : 'none';
+    if (ex.ew && window.Waves) applyElliottWave();
+    else renderEwRead(null);
+  }
+
+  // Detect + draw the Elliott Wave count at the current (auto or manual) swing %.
+  function applyElliottWave() {
+    if (!state.data || !window.Waves) return;
+    const ex = state.explore;
+    const w = window.Waves.detect(state.data.candles, ex.ewPct ? { pct: ex.ewPct } : {});
+    if (w.pivots && w.pivots.length >= 2) chart.setPolyline('zz', { points: w.pivots.map((p) => ({ i: p.i, price: p.price })), color: 'rgba(180,200,255,0.4)', width: 1.2 });
+    else chart.clearPolylines();
+    chart.setMarkers(w.found && w.waves ? w.waves.map((wv) => ({ index: wv.i, side: wv.type === 'H' ? 'above' : 'below', color: wv.type === 'H' ? '#46b3ff' : '#e0566a', text: wv.label })) : []);
+    const slider = $('#ewSensitivity');
+    const val = $('#ewSensVal');
+    if (slider && val) {
+      const usedPct = Math.round((w.pct || 0.08) * 100);
+      if (ex.ewPct == null) {
+        slider.value = usedPct;
+        val.textContent = 'auto (' + usedPct + '%)';
+      } else {
+        val.textContent = slider.value + '%';
+      }
     }
+    renderEwRead(w);
   }
 
   function renderEwRead(w) {
@@ -5557,6 +5595,17 @@ body {
     });
 
     $('#resetViewBtn').addEventListener('click', () => chart.resetView());
+
+    // Elliott Wave sensitivity slider
+    $('#ewSensitivity').addEventListener('input', () => {
+      state.explore.ewPct = +$('#ewSensitivity').value / 100;
+      $('#ewSensVal').textContent = $('#ewSensitivity').value + '%';
+      applyElliottWave();
+    });
+    $('#ewAutoBtn').addEventListener('click', () => {
+      state.explore.ewPct = null;
+      applyElliottWave();
+    });
 
     // adjusted-prices toggle (requires a reload)
     const adj = $('#adjustedToggle');
