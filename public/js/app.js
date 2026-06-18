@@ -24,7 +24,7 @@
     lessonIdx: 0,
     stepIdx: 0,
     view: 'lessons',
-    explore: { mode: 'candles', emaband: true, ema9: false, ema21: false, ema50: true, ma20: true, ma50: true, ma100: true, ma200: true, bb: false, vwap: false, volume: true, rsi: false, macd: false, sr: false, log: false }
+    explore: { mode: 'candles', emaband: true, ema9: false, ema21: false, ema50: true, ma20: true, ma50: true, ma100: true, ma200: true, bb: false, vwap: false, volume: true, rsi: false, macd: false, sr: false, log: false, ew: false }
   };
 
   let chart;
@@ -438,6 +438,37 @@
         });
       });
     }
+    if (ex.ew && window.Waves) {
+      const w = window.Waves.detect(candles);
+      if (w.pivots && w.pivots.length >= 2) chart.setPolyline('zz', { points: w.pivots.map((p) => ({ i: p.i, price: p.price })), color: 'rgba(180,200,255,0.4)', width: 1.2 });
+      if (w.found && w.waves) chart.setMarkers(w.waves.map((wv) => ({ index: wv.i, side: wv.type === 'H' ? 'above' : 'below', color: wv.type === 'H' ? '#46b3ff' : '#e0566a', text: wv.label })));
+      renderEwRead(w);
+    } else {
+      renderEwRead(null);
+    }
+  }
+
+  function renderEwRead(w) {
+    const box = $('#ewRead');
+    if (!box) return;
+    if (!w) {
+      box.style.display = 'none';
+      box.innerHTML = '';
+      return;
+    }
+    box.style.display = 'block';
+    if (!w.found) {
+      box.innerHTML = `<div class="ew-h">🌊 Elliott Wave <small>(beta)</small></div><div class="ew-cav">${w.note || 'No clean wave structure found.'} Tip: try the <b>5Y · weekly</b> or <b>Max · monthly</b> timeframe.</div>`;
+      return;
+    }
+    const rules = (w.rules || []).map((r) => `<div class="ew-rule ${r.ok ? 'ok' : 'no'}">${r.ok ? '✓' : '✗'} ${r.name}</div>`).join('');
+    const targets = (w.targets || []).map((t) => `<div class="ew-tgt"><span>${t.label}</span><b>${t.price.toFixed(2)}</b></div>`).join('');
+    box.innerHTML =
+      `<div class="ew-h">🌊 Elliott Wave <small>(beta · ${(w.pct * 100).toFixed(0)}% swings)</small></div>` +
+      `<div class="ew-sum">${w.summary}</div>` +
+      (rules ? `<div class="ew-rules">${rules}</div>` : '') +
+      (targets ? `<div class="ew-h2">Fib targets for the next move</div><div class="ew-tgts">${targets}</div>` : '') +
+      `<div class="ew-cav">Elliott counts are subjective and not predictive — one interpretation, educational only. Best read on weekly/monthly charts.</div>`;
   }
 
   function syncTabs() {

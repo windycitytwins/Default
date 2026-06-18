@@ -21,7 +21,10 @@ moving averages, volume, and RSI.
   5. 📊 **Volume** — conviction behind a move
   6. ⚡ **Momentum (RSI)** — overbought/oversold, divergence
   7. 🎯 **Putting It Together** — reading with confluence + a final check
-- **An Explore sandbox** — toggle any indicator on any symbol and practise.
+- **An Explore sandbox** — toggle any indicator on any symbol and practise,
+  including an experimental **Elliott Wave auto-counter** (ZigZag-based; fits a
+  5-wave impulse / A-B-C correction, validates the three hard rules and projects
+  Fib targets — one interpretation, *beta & subjective*, not predictive).
 - **A Signals tab** — an educational multi-timeframe technical read (Strong Sell →
   Strong Buy) with a full factor-by-factor breakdown, plus a swing-trader
   **trade plan** (entry zone, structure/ATR stop, resistance targets, R:R) drawn

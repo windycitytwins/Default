@@ -360,6 +360,72 @@
     return { bullish, bearish, detail };
   };
 
+  /**
+   * Percentage ZigZag — the significant swing pivots used for wave analysis.
+   * Returns alternating [{ i, price, type:'H'|'L' }] (a reversal of >= pct
+   * confirms a new pivot). pct e.g. 0.10 = 10%.
+   */
+  TA.zigzag = function (candles, pct) {
+    pct = pct || 0.12;
+    const n = candles.length;
+    const pivots = [];
+    if (n < 3) return pivots;
+    let trend = 0; // 0 unknown, 1 up, -1 down
+    let minIdx = 0;
+    let minP = candles[0].low;
+    let maxIdx = 0;
+    let maxP = candles[0].high;
+    let extIdx = 0;
+    let extPrice = candles[0].close;
+    for (let i = 1; i < n; i++) {
+      const h = candles[i].high;
+      const l = candles[i].low;
+      if (trend === 0) {
+        if (h > maxP) {
+          maxP = h;
+          maxIdx = i;
+        }
+        if (l < minP) {
+          minP = l;
+          minIdx = i;
+        }
+        if (h >= minP * (1 + pct)) {
+          pivots.push({ i: minIdx, price: minP, type: 'L' });
+          trend = 1;
+          extIdx = i;
+          extPrice = h;
+        } else if (l <= maxP * (1 - pct)) {
+          pivots.push({ i: maxIdx, price: maxP, type: 'H' });
+          trend = -1;
+          extIdx = i;
+          extPrice = l;
+        }
+      } else if (trend === 1) {
+        if (h > extPrice) {
+          extPrice = h;
+          extIdx = i;
+        } else if (l <= extPrice * (1 - pct)) {
+          pivots.push({ i: extIdx, price: extPrice, type: 'H' });
+          trend = -1;
+          extIdx = i;
+          extPrice = l;
+        }
+      } else {
+        if (l < extPrice) {
+          extPrice = l;
+          extIdx = i;
+        } else if (h >= extPrice * (1 + pct)) {
+          pivots.push({ i: extIdx, price: extPrice, type: 'L' });
+          trend = 1;
+          extIdx = i;
+          extPrice = h;
+        }
+      }
+    }
+    if (trend !== 0) pivots.push({ i: extIdx, price: extPrice, type: trend === 1 ? 'H' : 'L' });
+    return pivots;
+  };
+
   TA.closes = (candles) => candles.map((c) => c.close);
 
   window.TA = TA;

@@ -21,7 +21,7 @@ const css = fs.readFileSync(path.join(pub, 'css', 'styles.css'), 'utf8');
 html = html.replace(/<link rel="stylesheet" href="css\/styles\.css"\s*\/>/, () => `<style>\n${css}\n</style>`);
 
 // Inline each script, in order, escaping any stray "</script>" just in case.
-const order = ['indicators.js', 'data.js', 'chart.js', 'lessons.js', 'analysis.js', 'screener.js', 'glossary.js', 'blueprint.js', 'app.js'];
+const order = ['indicators.js', 'data.js', 'chart.js', 'lessons.js', 'analysis.js', 'waves.js', 'screener.js', 'glossary.js', 'blueprint.js', 'app.js'];
 for (const file of order) {
   const code = fs
     .readFileSync(path.join(pub, 'js', file), 'utf8')

@@ -68,6 +68,7 @@
       this.overlays = new Map(); // id -> {data:[null|num], color, width, label, dash}
       this.bands = new Map(); // id -> {upper:[], lower:[], color, lineColor, label}
       this.emaBands = new Map(); // id -> {fast:[], slow:[], up, down} trend-coloured ribbon
+      this.polylines = new Map(); // id -> {points:[{i,price}], color, width, dash}
       this.hlines = new Map(); // id -> {price, color, label, dash}
       this.zones = new Map(); // id -> {lo, hi, color, label}
       this.markers = []; // {index, side, color, text, shape}
@@ -157,6 +158,14 @@
       this.emaBands.clear();
       this.requestRender();
     }
+    setPolyline(id, cfg) {
+      this.polylines.set(id, cfg);
+      this.requestRender();
+    }
+    clearPolylines() {
+      this.polylines.clear();
+      this.requestRender();
+    }
     setHLine(id, cfg) {
       this.hlines.set(id, cfg);
       this.requestRender();
@@ -206,6 +215,7 @@
       this.overlays.clear();
       this.bands.clear();
       this.emaBands.clear();
+      this.polylines.clear();
       this.hlines.clear();
       this.zones.clear();
       this.markers = [];
@@ -398,6 +408,7 @@
       if (this.mode === 'candles') this._drawCandles(L, yOf);
       else this._drawLine(L, yOf);
       this._drawOverlays(L, yOf);
+      this._drawPolylines(L, yOf);
       this._drawHLines(L, yOf);
       if (this.flags.volume && L.vol) this._drawVolume(L.vol);
       if (this.flags.rsi && L.rsi) this._drawRSI(L.rsi);
@@ -679,6 +690,37 @@
       }
       ctx.setLineDash([]);
       ctx.restore();
+    }
+
+    _drawPolylines(L, yOf) {
+      const ctx = this.ctx;
+      const { s, e } = this._visible();
+      for (const [, pl] of this.polylines) {
+        if (!pl.points || pl.points.length < 2) continue;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(L.price.x, L.price.y, L.price.w, L.price.h);
+        ctx.clip();
+        ctx.strokeStyle = pl.color || 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = pl.width || 1.4;
+        ctx.setLineDash(pl.dash || []);
+        ctx.beginPath();
+        let started = false;
+        for (const pt of pl.points) {
+          if (pt.i < s - 2 || pt.i > e + 2) {
+            // still draw segments crossing the edge — keep line continuous
+          }
+          const x = this._xOf(pt.i, L.price);
+          const y = yOf(pt.price);
+          if (!started) {
+            ctx.moveTo(x, y);
+            started = true;
+          } else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
     }
 
     _drawHLines(L, yOf) {
