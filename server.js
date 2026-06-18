@@ -43,6 +43,7 @@ const SEC_UA = process.env.SEC_UA || 'ChartSchool/1.0 (educational tool; contact
 // Optional: AI auto-research via the Claude API (the user's own key).
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || '';
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
+const ANTHROPIC_MAX_TOKENS = Number(process.env.ANTHROPIC_MAX_TOKENS) || 4096;
 const RANGES = new Set(['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max']);
 const INTERVALS = new Set(['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h', '1d', '5d', '1wk', '1mo', '3mo']);
 
@@ -605,7 +606,7 @@ async function aiResearch(symbol, fields) {
     { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
     {
       model: ANTHROPIC_MODEL,
-      max_tokens: 8192,
+      max_tokens: ANTHROPIC_MAX_TOKENS,
       system,
       // Prefill the assistant turn with "{" so the reply is pure JSON (no
       // markdown fences or preamble to trip up parsing).
@@ -613,7 +614,15 @@ async function aiResearch(symbol, fields) {
     },
     120000
   );
-  if (res.status !== 200) throw tagErr(`Anthropic API HTTP ${res.status}`, res.status, res.body);
+  if (res.status !== 200) {
+    // surface Anthropic's actual error so failures are diagnosable
+    let why = res.body;
+    try {
+      const ej = JSON.parse(res.body);
+      why = (ej.error && ej.error.message) || why;
+    } catch (_) {}
+    throw tagErr(`Anthropic API ${res.status}: ${String(why).slice(0, 220)}`, res.status, res.body);
+  }
   const j = JSON.parse(res.body);
   const text = (j.content && j.content[0] && j.content[0].text) || '';
   let obj;
