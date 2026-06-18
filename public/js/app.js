@@ -628,7 +628,10 @@
       const items = g.checklist.map((it) => `<label class="bp-check"><input type="checkbox" data-cid="${it.id}" ${rec.checks[it.id] ? 'checked' : ''}/><span>${it.label}</span></label>`).join('');
       return `<div class="bp-group"><h4>${g.title}</h4>${items}</div>`;
     }
-    const fields = g.fields.map((f) => `<label class="bp-field"><span>${f.label}</span><textarea data-fid="${f.id}" rows="1" placeholder="${esc(f.ph || '')}">${esc(rec.fields[f.id] || '')}</textarea></label>`).join('');
+    const fields = g.fields.map((f) => {
+      const ai = rec.aiFilled && rec.aiFilled[f.id];
+      return `<label class="bp-field${ai ? ' ai' : ''}"><span>${f.label}${ai ? ' <i class="ai-tag">AI</i>' : ''}</span><textarea data-fid="${f.id}" rows="1" placeholder="${esc(f.ph || '')}">${esc(rec.fields[f.id] || '')}</textarea></label>`;
+    }).join('');
     return `<div class="bp-group"><h4>${g.title}</h4>${fields}</div>`;
   }
   function bpSectionHtml(sec, rec) {
@@ -677,6 +680,65 @@
     }
     if (rec.edgar) renderFinancialsAuto(rec.edgar);
   }
+  function aiFieldList() {
+    const out = [];
+    window.BLUEPRINT.sections.forEach((sec) => sec.groups.forEach((g) => (g.fields || []).forEach((f) => out.push({ id: f.id, label: f.label, prompt: f.ph, section: sec.title }))));
+    return out;
+  }
+  function updateAiStatus() {
+    const status = $('#aiStatus');
+    if (!status) return;
+    const rec = getResearchRec(state.symbol);
+    if (state.aiEnabled === false) {
+      status.innerHTML = 'AI auto-research is off — enable it with your Anthropic key: <code>ANTHROPIC_API_KEY=sk-ant-… node server.js</code>';
+      status.className = 'ai-status warn';
+    } else if (rec.aiMeta) {
+      status.textContent = `Last AI draft: ${rec.aiMeta.model} · ${rec.aiMeta.date} — verify before acting.`;
+      status.className = 'ai-status muted';
+    } else {
+      status.textContent = state.aiEnabled ? 'One click fills the whole worksheet (AI first-draft, then verify).' : '';
+      status.className = 'ai-status muted';
+    }
+  }
+  async function runAiResearch() {
+    const sym = state.symbol;
+    const rec = getResearchRec(sym);
+    const btn = $('#aiResearchBtn');
+    const status = $('#aiStatus');
+    if (location.protocol === 'file:') {
+      status.textContent = 'Start the live server (node server.js) to use AI auto-research.';
+      status.className = 'ai-status warn';
+      return;
+    }
+    btn.disabled = true;
+    const label = btn.textContent;
+    btn.textContent = `✨ Researching ${sym}…`;
+    status.textContent = 'Asking Claude to draft the due diligence (grounded in SEC/Nasdaq data)… ~10-20s';
+    status.className = 'ai-status';
+    try {
+      const r = await window.MarketData.aiResearch(sym, aiFieldList());
+      if (sym !== state.symbol) return;
+      const obj = r.fields || {};
+      rec.aiFilled = rec.aiFilled || {};
+      Object.keys(obj).forEach((id) => {
+        if (typeof obj[id] === 'string' && obj[id].trim()) {
+          rec.fields[id] = obj[id].trim();
+          rec.aiFilled[id] = true;
+        }
+      });
+      rec.aiMeta = { model: r.model, date: new Date().toLocaleString() };
+      saveResearchStore();
+      renderBlueprintBody(rec);
+      status.textContent = `✓ Drafted by ${r.model} — verify before acting. Edit any field to refine.`;
+      status.className = 'ai-status good';
+    } catch (e) {
+      status.textContent = (e && e.message) || 'AI research failed.';
+      status.className = 'ai-status warn';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  }
   function renderResearch() {
     const sym = state.symbol;
     const rec = getResearchRec(sym);
@@ -686,6 +748,7 @@
     $('#rschLinks').innerHTML = researchLinks(sym).map(([label, url]) => `<a class="rsch-link" href="${url}" target="_blank" rel="noopener">${label} ↗</a>`).join('');
     renderAutoStats(rec.auto);
     renderBlueprintBody(rec);
+    updateAiStatus();
     if (state._rschSym !== sym || !rec.auto) {
       state._rschSym = sym;
       fetchResearchData(sym, rec);
@@ -973,6 +1036,7 @@
       renderResearch();
       save();
     });
+    $('#aiResearchBtn').addEventListener('click', runAiResearch);
     $('#tabMarkets').addEventListener('click', () => {
       state.view = 'markets';
       syncTabs();
@@ -1028,6 +1092,12 @@
     bindUI();
     renderLessonList();
     syncTabs();
+    // detect whether AI auto-research is enabled on the server
+    window.MarketData.health().then((h) => {
+      state.aiEnabled = !!h.aiEnabled;
+      if (state.view === 'research') updateAiStatus();
+    });
+
     await loadSymbol(state.symbol); // also renders the current view (lessons/explore/signals)
 
     // live auto-refresh every ~18s (gentle; server also caches): intraday views

@@ -34,11 +34,17 @@ moving averages, volume, and RSI.
   advice; chart-structure only (no paid options-flow / dark-pool data).*
 - **A Research tab** — a persistent **due-diligence worksheet** (the "Stock
   Research Blueprint"): 7 sections (business model, management, financials, moat,
-  industry, valuation, risks) of prompt-guided fields you fill in. It auto-fills
-  the hard data — key stats (P/E, market cap, sector) from Nasdaq, recent **SEC
-  EDGAR** filings and basic financials from the SEC's free API — and **saves your
-  notes per ticker** on the device. Plus one-click deep-links (EarningsWhispers,
-  Benzinga, Dataroma, Options AI, Finviz).
+  industry, valuation, risks). It auto-fills the hard data — key stats from Nasdaq,
+  recent **SEC EDGAR** filings and basic financials from the SEC's free API — and
+  **saves per ticker** on the device. Plus deep-links (EarningsWhispers, Benzinga,
+  Dataroma, Options AI, Finviz).
+  - **✨ Optional AI auto-research:** with your own Anthropic API key, one click
+    drafts the *entire* worksheet (grounded in the fetched SEC/Nasdaq data) via
+    the Claude API — a first draft to verify, clearly marked AI-generated:
+    ```bash
+    ANTHROPIC_API_KEY=sk-ant-… node server.js
+    ```
+    (Off by default; without a key the worksheet is fully manual. ~pennies/company.)
 - **A Markets tab** — a sector heat map computed from the SPDR sector ETFs.
 - **A Learn library** — an in-app glossary & "how to read it" reference (earnings,
   balance sheets, SEC filings, the Fed & rates…) with links to authoritative sources.

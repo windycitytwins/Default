@@ -40,6 +40,9 @@ const UA =
   '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 // SEC requires a descriptive User-Agent for programmatic access.
 const SEC_UA = process.env.SEC_UA || 'ChartSchool/1.0 (educational tool; contact via app)';
+// Optional: AI auto-research via the Claude API (the user's own key).
+const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || '';
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
 const RANGES = new Set(['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max']);
 const INTERVALS = new Set(['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h', '1d', '5d', '1wk', '1mo', '3mo']);
 
@@ -497,6 +500,93 @@ async function profileReport(symbol) {
   return out;
 }
 
+// --- AI auto-research via the Claude API (optional, user's own key) ----------
+function httpsPostJSON(url, headers, bodyObj, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(bodyObj);
+    const u = new URL(url);
+    const req = https.request(
+      { hostname: u.hostname, path: u.pathname + u.search, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data), ...headers } },
+      (res) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (c) => (body += c));
+        res.on('end', () => resolve({ status: res.statusCode, body }));
+      }
+    );
+    req.setTimeout(timeoutMs || 90000, () => req.destroy(new Error('timeout')));
+    req.on('error', reject);
+    req.write(data);
+    req.end();
+  });
+}
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let b = '';
+    req.setEncoding('utf8');
+    req.on('data', (c) => {
+      b += c;
+      if (b.length > 300000) req.destroy();
+    });
+    req.on('end', () => resolve(b));
+    req.on('error', reject);
+  });
+}
+async function aiResearch(symbol, fields) {
+  if (!ANTHROPIC_KEY) throw tagErr('AI research is disabled. Set ANTHROPIC_API_KEY (your Anthropic key) and restart the server to enable it.', 0, '');
+  // gather grounding context from the free data sources
+  const ctx = { symbol };
+  try {
+    const p = await fromNasdaqSummary(symbol);
+    Object.assign(ctx, p);
+  } catch (_) {}
+  try {
+    const q = await getQuote(symbol);
+    if (q) {
+      ctx.price = q.price;
+      ctx.name = ctx.name || q.name;
+      ctx.exchange = ctx.exchange || q.exchange;
+    }
+  } catch (_) {}
+  try {
+    const e = await edgarReport(symbol);
+    ctx.companyName = e.name;
+    ctx.sic = e.sic;
+    ctx.financials = e.financials;
+    ctx.recentFilings = (e.filings || []).slice(0, 6).map((f) => `${f.form} ${f.date}`);
+  } catch (_) {}
+
+  const fieldList = fields.map((f) => `- ${f.id} [${f.section || ''} › ${f.label}]${f.prompt ? ' — ' + f.prompt : ''}`).join('\n');
+  const system =
+    `You are an equity-research assistant writing a FIRST-DRAFT due-diligence worksheet for ${symbol} that the user will independently verify. ` +
+    `Be concise: 1–2 sentences per field, specific and neutral. Ground any figures in the DATA provided; do NOT fabricate precise numbers you are unsure of — qualify with "approx." or "(verify)". ` +
+    `If you genuinely don't know something, say so briefly rather than guessing. This is educational research, NOT investment advice, and must not be presented as a recommendation. ` +
+    `Respond with ONLY one minified JSON object mapping each field id to a concise string. No markdown, no code fences, no extra commentary.`;
+  const user =
+    `Company: ${ctx.companyName || ctx.name || symbol} (${symbol})\n` +
+    `DATA (from Nasdaq & SEC EDGAR — may be partial, verify):\n${JSON.stringify(ctx)}\n\n` +
+    `Fill in EVERY one of these fields (use the id exactly as the JSON key):\n${fieldList}\n\n` +
+    `Return: {"field_id":"text", ...} covering all ids above.`;
+
+  const res = await httpsPostJSON(
+    'https://api.anthropic.com/v1/messages',
+    { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
+    { model: ANTHROPIC_MODEL, max_tokens: 4096, system, messages: [{ role: 'user', content: user }] },
+    120000
+  );
+  if (res.status !== 200) throw tagErr(`Anthropic API HTTP ${res.status}`, res.status, res.body);
+  const j = JSON.parse(res.body);
+  const text = (j.content && j.content[0] && j.content[0].text) || '';
+  const match = text.match(/\{[\s\S]*\}/);
+  let obj;
+  try {
+    obj = JSON.parse(match ? match[0] : text);
+  } catch (_) {
+    throw tagErr('AI returned unparseable output', 200, text.slice(0, 200));
+  }
+  return { fields: obj, model: ANTHROPIC_MODEL, company: ctx.companyName || ctx.name || symbol };
+}
+
 // --- unified loader + diagnostics --------------------------------------------
 function providersFor(interval) {
   const daily = ['1d', '1wk', '1mo', '3mo'].includes(interval);
@@ -627,13 +717,24 @@ const server = http.createServer((req, res) => {
   }
   const p = parsed.pathname;
   const q = parsed.searchParams;
+  if (req.method === 'POST' && p === '/api/ai-research') {
+    return void readBody(req).then((body) => {
+      let parsed2 = {};
+      try {
+        parsed2 = JSON.parse(body || '{}');
+      } catch (_) {}
+      const sym = (parsed2.symbol || 'AAPL').toUpperCase().slice(0, 15);
+      const fields = Array.isArray(parsed2.fields) ? parsed2.fields.slice(0, 80) : [];
+      return aiResearch(sym, fields).then((r) => sendJSON(res, r));
+    }).catch((e) => sendJSON(res, { error: e.message, detail: e.snippet || '' }, e.status === 0 ? 400 : 502));
+  }
   if (p === '/api/chart') return void handleChart(res, q).catch((e) => sendJSON(res, { error: 'server_error', message: e.message }, 500));
   if (p === '/api/search') return void searchSymbols((q.get('q') || '').slice(0, 40)).then((quotes) => sendJSON(res, { quotes })).catch((e) => sendJSON(res, { quotes: [], error: e.message }));
   if (p === '/api/quote') return void getQuote((q.get('symbol') || 'AAPL').toUpperCase().slice(0, 15)).then((r) => (r ? sendJSON(res, r) : sendJSON(res, { error: 'no_quote' }, 502))).catch((e) => sendJSON(res, { error: e.message }, 502));
   if (p === '/api/profile') return void profileReport((q.get('symbol') || 'AAPL').toUpperCase().slice(0, 15)).then((r) => sendJSON(res, r)).catch((e) => sendJSON(res, { error: e.message }, 502));
   if (p === '/api/edgar') return void edgarReport((q.get('symbol') || 'AAPL').toUpperCase().slice(0, 15)).then((r) => sendJSON(res, r)).catch((e) => sendJSON(res, { error: e.message, detail: e.snippet || '' }, e.status === 404 ? 404 : 502));
   if (p === '/api/diagnose') return void diagnose((q.get('symbol') || 'AAPL').toUpperCase().slice(0, 15)).then((r) => sendJSON(res, r)).catch((e) => sendJSON(res, { error: e.message }, 500));
-  if (p === '/api/health') return void sendJSON(res, { ok: true, twelveDataKey: !!TWELVEDATA_KEY, time: Date.now() });
+  if (p === '/api/health') return void sendJSON(res, { ok: true, twelveDataKey: !!TWELVEDATA_KEY, aiEnabled: !!ANTHROPIC_KEY, aiModel: ANTHROPIC_KEY ? ANTHROPIC_MODEL : null, time: Date.now() });
   // static
   let rel = decodeURIComponent(p);
   if (rel === '/' || rel === '') rel = '/index.html';
@@ -658,9 +759,10 @@ if (require.main === module) {
     console.log(`\n  📈  Chart School is running`);
     console.log(`      →  http://localhost:${PORT}\n`);
     console.log(`  Real data: ${TWELVEDATA_KEY ? 'Twelve Data → ' : ''}Yahoo Finance → Nasdaq → Stooq (keyless). No fabricated data.`);
+    console.log(`  AI auto-research: ${ANTHROPIC_KEY ? 'ON (' + ANTHROPIC_MODEL + ')' : 'off — set ANTHROPIC_API_KEY to enable'}`);
     console.log(`  Verify accuracy:  node verify-data.js AAPL\n`);
     console.log(`  Press Ctrl+C to stop.\n`);
   });
 }
 
-module.exports = { fromYahoo, fromStooq, fromNasdaq, fromNasdaqIntraday, fromNasdaqQuote, getQuote, fromTwelveData, fromNasdaqSummary, profileReport, edgarReport, searchSymbols, loadChart, diagnose, applyAdjustment, getYahooAuth };
+module.exports = { fromYahoo, fromStooq, fromNasdaq, fromNasdaqIntraday, fromNasdaqQuote, getQuote, fromTwelveData, fromNasdaqSummary, profileReport, edgarReport, aiResearch, searchSymbols, loadChart, diagnose, applyAdjustment, getYahooAuth };

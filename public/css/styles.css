@@ -276,6 +276,14 @@ body {
 .bp-check input { margin-top: 2px; accent-color: var(--accent); flex-shrink: 0; }
 .bp-auto { padding: 10px 13px; border-top: 1px solid var(--border); background: rgba(91,140,255,0.05); }
 .bp-auto-h { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent-2); margin-bottom: 8px; }
+.ai-status { font-size: 11.5px; line-height: 1.5; }
+.ai-status.warn { color: var(--gold); }
+.ai-status.good { color: #6fd3a8; }
+.ai-status.muted { color: var(--muted); }
+.ai-status code { background: #0e1424; border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+#aiResearchBtn { background: linear-gradient(180deg, #7d5bff, #5b3ee8); }
+.bp-field.ai textarea { border-color: rgba(125,91,255,0.45); background: rgba(125,91,255,0.06); }
+.ai-tag { font-style: normal; font-size: 9px; font-weight: 700; background: rgba(125,91,255,0.25); color: #c3b0ff; padding: 1px 5px; border-radius: 4px; vertical-align: middle; }
 
 /* ---------- markets heat map ---------- */
 .mkt-map { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }

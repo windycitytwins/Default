@@ -157,6 +157,28 @@
     return j;
   }
 
+  /** Server capabilities (e.g. whether AI auto-research is enabled). */
+  async function health() {
+    try {
+      const res = await fetch('/api/health', { headers: { Accept: 'application/json' } });
+      return await res.json();
+    } catch (_) {
+      return { ok: false };
+    }
+  }
+
+  /** AI-generated due-diligence draft (requires ANTHROPIC_API_KEY on the server). */
+  async function aiResearch(symbol, fields) {
+    const res = await fetch('/api/ai-research', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ symbol, fields })
+    });
+    const j = await res.json();
+    if (!res.ok || j.error) throw new Error(j.error || 'AI research failed');
+    return j;
+  }
+
   /** Explicit, clearly-labelled sample data (offline only — never live). */
   function loadDemo(symbol, range = '1y', interval = '1d') {
     const demo = synth(symbol, range === '5d' || range === '1d' || interval !== '1d' ? 130 : 260);
@@ -166,5 +188,5 @@
     return demo;
   }
 
-  window.MarketData = { load, loadDemo, quote, profile, edgar, synth };
+  window.MarketData = { load, loadDemo, quote, profile, edgar, health, aiResearch, synth };
 })();
