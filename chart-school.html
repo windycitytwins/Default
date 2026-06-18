@@ -3865,19 +3865,24 @@ body {
       let r = null;
       if (t === 'LHLHLH') r = score(s, 1);
       else if (t === 'HLHLHL') r = score(s, -1);
-      // Rule 1 (W2 < 100% of W1) is mandatory — a deeper retrace invalidates
-      // the wave-1 low entirely.
+      // Rule 1 (W2 < 100% of W1) is mandatory.
       if (!r || !r.rules[0].ok) continue;
-      // Volume bias toward the textbook signature: Wave 3 should carry peak
-      // volume. This nudges the auto-count toward a clean, expert-like labelling.
+      // Volume bias toward the textbook signature (Wave 3 carries peak volume).
       const wv = waveVolumes(s, candles);
       const peak = wv.indexOf(Math.max.apply(null, wv));
       r.volBonus = (peak === 2 ? 1 : 0) + (wv[2] > wv[0] && wv[2] > wv[4] ? 0.5 : 0);
-      const better =
-        !best ||
-        r.score > best.score ||
-        (r.score === best.score && r.volBonus > best.volBonus) ||
-        (r.score === best.score && r.volBonus === best.volBonus && s[5].i > best.seg[5].i);
+      // PRIMARY: the most dominant (largest price span) valid 5-wave wins, so we
+      // capture the major move — not a tiny sub-structure. Volume/score/recency
+      // only break ties between counts of comparable size.
+      r.amp = Math.abs(s[5].price - s[0].price);
+      let better = false;
+      if (!best) better = true;
+      else if (r.amp > best.amp * 1.2) better = true;
+      else if (r.amp >= best.amp * 0.8) {
+        if (r.score > best.score) better = true;
+        else if (r.score === best.score && r.volBonus > best.volBonus) better = true;
+        else if (r.score === best.score && r.volBonus === best.volBonus && s[5].i > best.seg[5].i) better = true;
+      }
       if (better) best = r;
     }
     if (!best || best.score < 2) return null;
@@ -3904,8 +3909,8 @@ body {
     if (extending) {
       summary =
         `A ${dir} 5-wave structure fits these swings, but price has since pushed ${sign > 0 ? 'above' : 'below'} the labelled Wave 5 ` +
-        `(now ${lastClose.toFixed(2)} vs Wave 5 at ${p[5].toFixed(2)}). So this is a lower-degree count and the move is likely still ` +
-        `extending — switch to a higher timeframe (5Y · weekly or Max · monthly) for the dominant wave structure.`;
+        `(now ${lastClose.toFixed(2)} vs Wave 5 at ${p[5].toFixed(2)}). So this is a lower-degree sub-count and the move extended past it — ` +
+        `the dominant impulse is larger. Zoom out (or you may already be looking at the top degree, with the move still unfolding).`;
     } else {
       targets = [
         { label: 'Wave-A 38.2% retrace', price: dn ? p[5] - 0.382 * whole : p[5] + 0.382 * whole },
