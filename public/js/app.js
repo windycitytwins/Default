@@ -157,6 +157,42 @@
     s.textContent = text;
     s.className = 'data-status ' + (tone || 'muted');
   }
+  function toast(msg) {
+    const t = $('#toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.classList.remove('show'), 2400);
+  }
+  // Copy the chart (with any Elliott Wave / indicator overlays) to the clipboard,
+  // falling back to a PNG download where clipboard image-write isn't available.
+  async function exportChart() {
+    const blob = await chart.toPNG();
+    if (!blob) {
+      toast('Couldn’t capture the chart');
+      return;
+    }
+    const fname = `${state.symbol}_${state.range}_${new Date().toISOString().slice(0, 10)}.png`;
+    if (navigator.clipboard && window.ClipboardItem) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        toast('📋 Chart copied — paste it anywhere');
+        return;
+      } catch (_) {
+        /* clipboard blocked → download instead */
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('⬇ Chart image downloaded');
+  }
 
   // ---- live polling --------------------------------------------------------
   let refreshing = false;
@@ -1012,6 +1048,7 @@
   // ---- wiring --------------------------------------------------------------
   function bindUI() {
     $('#loadBtn').addEventListener('click', () => loadSymbol($('#symbolInput').value));
+    $('#exportChartBtn').addEventListener('click', exportChart);
     $('#symbolInput').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') loadSymbol($('#symbolInput').value);
     });

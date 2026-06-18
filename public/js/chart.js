@@ -1047,6 +1047,22 @@
       this.livePrice = typeof p === 'number' && isFinite(p) ? p : null;
       this.requestRender();
     }
+    /** Render a clean frame (no crosshair) and return a PNG blob of the chart. */
+    toPNG() {
+      const h = this.hover;
+      this.hover = null;
+      this.render();
+      const blob = new Promise((resolve) => {
+        try {
+          this.canvas.toBlob((b) => resolve(b), 'image/png');
+        } catch (_) {
+          resolve(null);
+        }
+      });
+      this.hover = h;
+      this.requestRender();
+      return blob;
+    }
 
     _drawCrosshair(L, yOf) {
       if (!this.hover) return;

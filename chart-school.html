@@ -136,6 +136,44 @@ body {
 }
 #chart { position: absolute; inset: 0; }
 .sc-canvas { display: block; }
+.chart-export {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 4;
+  background: rgba(22, 29, 48, 0.82);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 11px;
+  border-radius: 8px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  opacity: 0.7;
+  transition: opacity 0.15s, border-color 0.15s;
+}
+.chart-export:hover { opacity: 1; border-color: var(--accent); }
+
+.toast {
+  position: fixed;
+  bottom: 26px;
+  left: 50%;
+  transform: translateX(-50%) translateY(14px);
+  background: #1b2440;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 80;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 /* sample-data warning banner */
 .sample-banner {
@@ -618,6 +656,7 @@ body {
       </div>
       <div class="chart-host">
         <div id="chart"></div>
+        <button id="exportChartBtn" class="chart-export" title="Copy chart image to clipboard (downloads if copy is blocked)">📷 Copy</button>
         <div id="chartError" class="chart-error">
           <div class="err-card">
             <div class="err-icon">📡</div>
@@ -795,6 +834,8 @@ body {
       </div>
     </aside>
   </main>
+
+  <div id="toast" class="toast"></div>
 
   <div id="glossaryModal" class="modal" style="display:none">
     <div class="modal-card">
@@ -2486,6 +2527,22 @@ body {
       this.livePrice = typeof p === 'number' && isFinite(p) ? p : null;
       this.requestRender();
     }
+    /** Render a clean frame (no crosshair) and return a PNG blob of the chart. */
+    toPNG() {
+      const h = this.hover;
+      this.hover = null;
+      this.render();
+      const blob = new Promise((resolve) => {
+        try {
+          this.canvas.toBlob((b) => resolve(b), 'image/png');
+        } catch (_) {
+          resolve(null);
+        }
+      });
+      this.hover = h;
+      this.requestRender();
+      return blob;
+    }
 
     _drawCrosshair(L, yOf) {
       if (!this.hover) return;
@@ -3746,7 +3803,8 @@ body {
     const pct = opts.pct || (candles.length > 220 ? 0.1 : candles.length > 120 ? 0.085 : 0.07);
     const piv = ta.zigzag(candles, pct);
     if (piv.length < 4) return { found: false, pivots: piv, pct, note: 'Too few significant swings at this sensitivity — Elliott counts read best on weekly/monthly charts.' };
-    const imp = tryImpulse(piv);
+    const lastClose = candles[candles.length - 1].close;
+    const imp = tryImpulse(piv, lastClose);
     if (imp) return { found: true, pivots: piv, pct, ...imp };
     const corr = tryCorrection(piv);
     if (corr) return { found: true, pivots: piv, pct, ...corr };
@@ -3769,7 +3827,7 @@ body {
     return { sign, rules, score: (r1 ? 1 : 0) + (r2 ? 1 : 0) + (r3 ? 1 : 0), w1, w3, w5, p, seg: s };
   }
 
-  function tryImpulse(piv) {
+  function tryImpulse(piv, lastClose) {
     let best = null;
     for (let end = piv.length; end >= 6; end--) {
       const s = piv.slice(end - 6, end);
@@ -3783,10 +3841,10 @@ body {
     // Rule 1 (W2 < 100% of W1) is mandatory — a deeper retrace invalidates the
     // wave-1 low entirely; require it plus at least one other rule.
     if (!best || best.score < 2 || !best.rules[0].ok) return null;
-    return finishImpulse(best);
+    return finishImpulse(best, lastClose);
   }
 
-  function finishImpulse(b) {
+  function finishImpulse(b, lastClose) {
     const { sign, rules, p, w1, w3, w5, seg } = b;
     const w2retr = Math.abs(p[1] - p[2]) / (w1 || 1);
     const w4retr = Math.abs(p[3] - p[4]) / (w3 || 1);
@@ -3798,17 +3856,29 @@ body {
     const waves = seg.map((pv, k) => ({ label: labels[k], i: pv.i, price: pv.price, type: pv.type }));
     const whole = Math.abs(p[5] - p[0]);
     const dn = sign > 0;
-    const targets = [
-      { label: 'Wave-A 38.2% retrace', price: dn ? p[5] - 0.382 * whole : p[5] + 0.382 * whole },
-      { label: 'Wave-A 61.8% retrace', price: dn ? p[5] - 0.618 * whole : p[5] + 0.618 * whole },
-      { label: 'Wave-4 support zone', price: p[4] }
-    ];
-    const summary =
-      `Possible ${dir} 5-wave impulse — ${b.score}/3 hard rules satisfied. ` +
-      `Wave ${longest} is the extended wave (W3 ≈ ${w3ext.toFixed(2)}× W1). ` +
-      `Wave 2 retraced ${(w2retr * 100).toFixed(0)}%, Wave 4 ${(w4retr * 100).toFixed(0)}% — alternation ${alternation ? 'present' : 'weak'}. ` +
-      `With Wave 5 in place, a 3-wave (A-B-C) correction is the textbook next move.`;
-    return { type: 'impulse', dir, score: b.score, rules, waves, targets, w2retr, w4retr, w3ext, longest, alternation, summary };
+    // Has price pushed beyond the labelled Wave 5? Then the count is stale — the
+    // move is still extending, or this is just a lower-degree structure.
+    const extending = sign > 0 ? lastClose > p[5] * 1.02 : lastClose < p[5] * 0.98;
+    let targets = [];
+    let summary;
+    if (extending) {
+      summary =
+        `A ${dir} 5-wave structure fits these swings, but price has since pushed ${sign > 0 ? 'above' : 'below'} the labelled Wave 5 ` +
+        `(now ${lastClose.toFixed(2)} vs Wave 5 at ${p[5].toFixed(2)}). So this is a lower-degree count and the move is likely still ` +
+        `extending — switch to a higher timeframe (5Y · weekly or Max · monthly) for the dominant wave structure.`;
+    } else {
+      targets = [
+        { label: 'Wave-A 38.2% retrace', price: dn ? p[5] - 0.382 * whole : p[5] + 0.382 * whole },
+        { label: 'Wave-A 61.8% retrace', price: dn ? p[5] - 0.618 * whole : p[5] + 0.618 * whole },
+        { label: 'Wave-4 support zone', price: p[4] }
+      ];
+      summary =
+        `Possible ${dir} 5-wave impulse — ${b.score}/3 hard rules satisfied. ` +
+        `Wave ${longest} is the extended wave (W3 ≈ ${w3ext.toFixed(2)}× W1). ` +
+        `Wave 2 retraced ${(w2retr * 100).toFixed(0)}%, Wave 4 ${(w4retr * 100).toFixed(0)}% — alternation ${alternation ? 'present' : 'weak'}. ` +
+        `With Wave 5 in place, a 3-wave (A-B-C) correction is the textbook next move.`;
+    }
+    return { type: 'impulse', dir, score: b.score, rules, waves, targets, w2retr, w4retr, w3ext, longest, alternation, extending, summary };
   }
 
   function tryCorrection(piv) {
@@ -4423,6 +4493,42 @@ body {
     const s = $('#dataStatus');
     s.textContent = text;
     s.className = 'data-status ' + (tone || 'muted');
+  }
+  function toast(msg) {
+    const t = $('#toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.classList.remove('show'), 2400);
+  }
+  // Copy the chart (with any Elliott Wave / indicator overlays) to the clipboard,
+  // falling back to a PNG download where clipboard image-write isn't available.
+  async function exportChart() {
+    const blob = await chart.toPNG();
+    if (!blob) {
+      toast('Couldn’t capture the chart');
+      return;
+    }
+    const fname = `${state.symbol}_${state.range}_${new Date().toISOString().slice(0, 10)}.png`;
+    if (navigator.clipboard && window.ClipboardItem) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        toast('📋 Chart copied — paste it anywhere');
+        return;
+      } catch (_) {
+        /* clipboard blocked → download instead */
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('⬇ Chart image downloaded');
   }
 
   // ---- live polling --------------------------------------------------------
@@ -5279,6 +5385,7 @@ body {
   // ---- wiring --------------------------------------------------------------
   function bindUI() {
     $('#loadBtn').addEventListener('click', () => loadSymbol($('#symbolInput').value));
+    $('#exportChartBtn').addEventListener('click', exportChart);
     $('#symbolInput').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') loadSymbol($('#symbolInput').value);
     });

@@ -17,7 +17,8 @@
     const pct = opts.pct || (candles.length > 220 ? 0.1 : candles.length > 120 ? 0.085 : 0.07);
     const piv = ta.zigzag(candles, pct);
     if (piv.length < 4) return { found: false, pivots: piv, pct, note: 'Too few significant swings at this sensitivity — Elliott counts read best on weekly/monthly charts.' };
-    const imp = tryImpulse(piv);
+    const lastClose = candles[candles.length - 1].close;
+    const imp = tryImpulse(piv, lastClose);
     if (imp) return { found: true, pivots: piv, pct, ...imp };
     const corr = tryCorrection(piv);
     if (corr) return { found: true, pivots: piv, pct, ...corr };
@@ -40,7 +41,7 @@
     return { sign, rules, score: (r1 ? 1 : 0) + (r2 ? 1 : 0) + (r3 ? 1 : 0), w1, w3, w5, p, seg: s };
   }
 
-  function tryImpulse(piv) {
+  function tryImpulse(piv, lastClose) {
     let best = null;
     for (let end = piv.length; end >= 6; end--) {
       const s = piv.slice(end - 6, end);
@@ -54,10 +55,10 @@
     // Rule 1 (W2 < 100% of W1) is mandatory — a deeper retrace invalidates the
     // wave-1 low entirely; require it plus at least one other rule.
     if (!best || best.score < 2 || !best.rules[0].ok) return null;
-    return finishImpulse(best);
+    return finishImpulse(best, lastClose);
   }
 
-  function finishImpulse(b) {
+  function finishImpulse(b, lastClose) {
     const { sign, rules, p, w1, w3, w5, seg } = b;
     const w2retr = Math.abs(p[1] - p[2]) / (w1 || 1);
     const w4retr = Math.abs(p[3] - p[4]) / (w3 || 1);
@@ -69,17 +70,29 @@
     const waves = seg.map((pv, k) => ({ label: labels[k], i: pv.i, price: pv.price, type: pv.type }));
     const whole = Math.abs(p[5] - p[0]);
     const dn = sign > 0;
-    const targets = [
-      { label: 'Wave-A 38.2% retrace', price: dn ? p[5] - 0.382 * whole : p[5] + 0.382 * whole },
-      { label: 'Wave-A 61.8% retrace', price: dn ? p[5] - 0.618 * whole : p[5] + 0.618 * whole },
-      { label: 'Wave-4 support zone', price: p[4] }
-    ];
-    const summary =
-      `Possible ${dir} 5-wave impulse — ${b.score}/3 hard rules satisfied. ` +
-      `Wave ${longest} is the extended wave (W3 ≈ ${w3ext.toFixed(2)}× W1). ` +
-      `Wave 2 retraced ${(w2retr * 100).toFixed(0)}%, Wave 4 ${(w4retr * 100).toFixed(0)}% — alternation ${alternation ? 'present' : 'weak'}. ` +
-      `With Wave 5 in place, a 3-wave (A-B-C) correction is the textbook next move.`;
-    return { type: 'impulse', dir, score: b.score, rules, waves, targets, w2retr, w4retr, w3ext, longest, alternation, summary };
+    // Has price pushed beyond the labelled Wave 5? Then the count is stale — the
+    // move is still extending, or this is just a lower-degree structure.
+    const extending = sign > 0 ? lastClose > p[5] * 1.02 : lastClose < p[5] * 0.98;
+    let targets = [];
+    let summary;
+    if (extending) {
+      summary =
+        `A ${dir} 5-wave structure fits these swings, but price has since pushed ${sign > 0 ? 'above' : 'below'} the labelled Wave 5 ` +
+        `(now ${lastClose.toFixed(2)} vs Wave 5 at ${p[5].toFixed(2)}). So this is a lower-degree count and the move is likely still ` +
+        `extending — switch to a higher timeframe (5Y · weekly or Max · monthly) for the dominant wave structure.`;
+    } else {
+      targets = [
+        { label: 'Wave-A 38.2% retrace', price: dn ? p[5] - 0.382 * whole : p[5] + 0.382 * whole },
+        { label: 'Wave-A 61.8% retrace', price: dn ? p[5] - 0.618 * whole : p[5] + 0.618 * whole },
+        { label: 'Wave-4 support zone', price: p[4] }
+      ];
+      summary =
+        `Possible ${dir} 5-wave impulse — ${b.score}/3 hard rules satisfied. ` +
+        `Wave ${longest} is the extended wave (W3 ≈ ${w3ext.toFixed(2)}× W1). ` +
+        `Wave 2 retraced ${(w2retr * 100).toFixed(0)}%, Wave 4 ${(w4retr * 100).toFixed(0)}% — alternation ${alternation ? 'present' : 'weak'}. ` +
+        `With Wave 5 in place, a 3-wave (A-B-C) correction is the textbook next move.`;
+    }
+    return { type: 'impulse', dir, score: b.score, rules, waves, targets, w2retr, w4retr, w3ext, longest, alternation, extending, summary };
   }
 
   function tryCorrection(piv) {
