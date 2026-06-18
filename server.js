@@ -608,9 +608,9 @@ async function aiResearch(symbol, fields) {
       model: ANTHROPIC_MODEL,
       max_tokens: ANTHROPIC_MAX_TOKENS,
       system,
-      // Prefill the assistant turn with "{" so the reply is pure JSON (no
-      // markdown fences or preamble to trip up parsing).
-      messages: [{ role: 'user', content: user }, { role: 'assistant', content: '{' }]
+      // (No assistant prefill — some models reject it; the system prompt asks
+      // for raw JSON and extractJsonObject() handles fences/preamble/truncation.)
+      messages: [{ role: 'user', content: user }]
     },
     120000
   );
@@ -627,7 +627,7 @@ async function aiResearch(symbol, fields) {
   const text = (j.content && j.content[0] && j.content[0].text) || '';
   let obj;
   try {
-    obj = extractJsonObject('{' + text);
+    obj = extractJsonObject(text);
   } catch (_) {
     throw tagErr('AI returned unparseable output', 200, text.slice(0, 300));
   }
