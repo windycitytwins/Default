@@ -3855,7 +3855,18 @@ body {
     }
     if (imp) return { found: true, pivots: usePiv, pct: usePct, ...imp };
     const corr = tryCorrection(piv);
-    if (corr) return { found: true, pivots: piv, pct, ...corr };
+    if (corr) {
+      // If the dominant swing dwarfs this A-B-C, the big move is a single
+      // impulsive leg that doesn't subdivide here — nudge to a lower timeframe.
+      let maxLeg = 0;
+      for (let i = 1; i < piv.length; i++) maxLeg = Math.max(maxLeg, Math.abs(piv[i].price - piv[i - 1].price));
+      const cp = corr.waves.map((w) => w.price);
+      const corrSpan = Math.max.apply(null, cp) - Math.min.apply(null, cp);
+      if (corrSpan > 0 && maxLeg > corrSpan * 1.5) {
+        corr.summary += ' Note: the dominant move here is a single steep leg that doesn’t subdivide into 5 waves at this timeframe — drop to a lower timeframe (5Y · weekly or 1Y · daily) to see its sub-waves.';
+      }
+      return { found: true, pivots: piv, pct, ...corr };
+    }
     return { found: false, pivots: piv, pct, note: 'No clean 5-wave or A-B-C structure at this sensitivity. Counts are subjective — try weekly/monthly data.' };
   }
 
