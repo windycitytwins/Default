@@ -499,10 +499,16 @@
     }
     const rules = (w.rules || []).map((r) => `<div class="ew-rule ${r.ok ? 'ok' : 'no'}">${r.ok ? '✓' : '✗'} ${r.name}</div>`).join('');
     const targets = (w.targets || []).map((t) => `<div class="ew-tgt"><span>${t.label}</span><b>${t.price.toFixed(2)}</b></div>`).join('');
+    const vol = w.waveVol && w.waveVol.length
+      ? `<div class="ew-h2">Volume per wave</div><div class="ew-vols">${w.waveVol
+          .map((rv, k) => `<div class="ew-vol ${k === w.peakWave - 1 ? 'peak' : ''}"><span class="ew-volbar"><i style="height:${Math.max(6, Math.round(rv * 100))}%"></i></span><b>${k + 1}</b></div>`)
+          .join('')}</div><div class="ew-cav">${w.volNote || ''}</div>`
+      : '';
     box.innerHTML =
       `<div class="ew-h">🌊 Elliott Wave <small>(beta · ${(w.pct * 100).toFixed(0)}% swings)</small></div>` +
       `<div class="ew-sum">${w.summary}</div>` +
       (rules ? `<div class="ew-rules">${rules}</div>` : '') +
+      vol +
       (targets ? `<div class="ew-h2">Fib targets for the next move</div><div class="ew-tgts">${targets}</div>` : '') +
       `<div class="ew-cav">Elliott counts are subjective and not predictive — one interpretation, educational only. Best read on weekly/monthly charts.</div>`;
   }

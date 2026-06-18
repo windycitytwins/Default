@@ -18,7 +18,7 @@
     const piv = ta.zigzag(candles, pct);
     if (piv.length < 4) return { found: false, pivots: piv, pct, note: 'Too few significant swings at this sensitivity — Elliott counts read best on weekly/monthly charts.' };
     const lastClose = candles[candles.length - 1].close;
-    const imp = tryImpulse(piv, lastClose);
+    const imp = tryImpulse(piv, lastClose, candles);
     if (imp) return { found: true, pivots: piv, pct, ...imp };
     const corr = tryCorrection(piv);
     if (corr) return { found: true, pivots: piv, pct, ...corr };
@@ -41,7 +41,23 @@
     return { sign, rules, score: (r1 ? 1 : 0) + (r2 ? 1 : 0) + (r3 ? 1 : 0), w1, w3, w5, p, seg: s };
   }
 
-  function tryImpulse(piv, lastClose) {
+  function waveVolumes(seg, candles) {
+    const v = [];
+    for (let k = 0; k < seg.length - 1; k++) {
+      const a = Math.min(seg[k].i, seg[k + 1].i);
+      const b = Math.max(seg[k].i, seg[k + 1].i);
+      let sum = 0;
+      let c = 0;
+      for (let i = a; i <= b; i++) {
+        sum += (candles[i] && candles[i].volume) || 0;
+        c++;
+      }
+      v.push(c ? sum / c : 0);
+    }
+    return v;
+  }
+
+  function tryImpulse(piv, lastClose, candles) {
     let best = null;
     for (let end = piv.length; end >= 6; end--) {
       const s = piv.slice(end - 6, end);
@@ -55,10 +71,10 @@
     // Rule 1 (W2 < 100% of W1) is mandatory — a deeper retrace invalidates the
     // wave-1 low entirely; require it plus at least one other rule.
     if (!best || best.score < 2 || !best.rules[0].ok) return null;
-    return finishImpulse(best, lastClose);
+    return finishImpulse(best, lastClose, candles);
   }
 
-  function finishImpulse(b, lastClose) {
+  function finishImpulse(b, lastClose, candles) {
     const { sign, rules, p, w1, w3, w5, seg } = b;
     const w2retr = Math.abs(p[1] - p[2]) / (w1 || 1);
     const w4retr = Math.abs(p[3] - p[4]) / (w3 || 1);
@@ -90,9 +106,24 @@
         `Possible ${dir} 5-wave impulse — ${b.score}/3 hard rules satisfied. ` +
         `Wave ${longest} is the extended wave (W3 ≈ ${w3ext.toFixed(2)}× W1). ` +
         `Wave 2 retraced ${(w2retr * 100).toFixed(0)}%, Wave 4 ${(w4retr * 100).toFixed(0)}% — alternation ${alternation ? 'present' : 'weak'}. ` +
-        `With Wave 5 in place, a 3-wave (A-B-C) correction is the textbook next move.`;
+        `If complete, this whole 5-wave move may itself be Wave 1 of a HIGHER degree — a larger Wave 2 (≈38–62% retrace) would typically follow before the next impulse.`;
     }
-    return { type: 'impulse', dir, score: b.score, rules, waves, targets, w2retr, w4retr, w3ext, longest, alternation, extending, summary };
+
+    // Volume-by-wave (the Elliott guideline: W3 should carry peak volume; a
+    // Wave-5 that prints on lighter volume than W3 is a classic exhaustion signal).
+    const wv = waveVolumes(seg, candles); // [W1..W5]
+    const maxV = Math.max.apply(null, wv) || 1;
+    const peakWave = wv.indexOf(maxV) + 1;
+    const w3v = wv[2] || 0;
+    const w5v = wv[4] || 0;
+    const w5div = w5v > 0 && w3v > 0 && w5v < w3v * 0.9;
+    let volNote;
+    if (peakWave === 3 && w5div) volNote = `Volume peaked on Wave 3 (textbook), and Wave 5 ran ~${Math.round((1 - w5v / w3v) * 100)}% lighter than Wave 3 — a classic exhaustion divergence near the end of an impulse.`;
+    else if (peakWave === 3) volNote = `Volume peaked on Wave 3 (textbook — the strongest wave). Wave 5 volume held up, so a weaker exhaustion signal.`;
+    else volNote = `Heaviest volume was in Wave ${peakWave}, not Wave 3 — atypical; a clean impulse usually carries peak volume in Wave 3.`;
+    const waveVol = wv.map((v) => v / maxV);
+
+    return { type: 'impulse', dir, score: b.score, rules, waves, targets, w2retr, w4retr, w3ext, longest, alternation, extending, waveVol, peakWave, w5div, volNote, summary };
   }
 
   function tryCorrection(piv) {

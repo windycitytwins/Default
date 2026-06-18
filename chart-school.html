@@ -348,6 +348,13 @@ body {
 .ew-tgt { display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px; background: #0e1424; font-size: 12px; }
 .ew-tgt span { color: var(--muted); }
 .ew-tgt b { font-variant-numeric: tabular-nums; color: #8fb4ff; }
+.ew-vols { display: flex; gap: 6px; align-items: flex-end; height: 56px; margin-bottom: 8px; }
+.ew-vol { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }
+.ew-volbar { flex: 1; width: 100%; display: flex; align-items: flex-end; background: #0e1424; border-radius: 4px; overflow: hidden; }
+.ew-volbar i { width: 100%; background: rgba(150,170,255,0.5); display: block; }
+.ew-vol.peak .ew-volbar i { background: #46b3ff; }
+.ew-vol b { font-size: 11px; color: var(--muted); font-weight: 700; }
+.ew-vol.peak b { color: #46b3ff; }
 .ew-cav { font-size: 11px; color: var(--muted); line-height: 1.5; font-style: italic; }
 
 /* ---------- markets heat map ---------- */
@@ -3804,7 +3811,7 @@ body {
     const piv = ta.zigzag(candles, pct);
     if (piv.length < 4) return { found: false, pivots: piv, pct, note: 'Too few significant swings at this sensitivity — Elliott counts read best on weekly/monthly charts.' };
     const lastClose = candles[candles.length - 1].close;
-    const imp = tryImpulse(piv, lastClose);
+    const imp = tryImpulse(piv, lastClose, candles);
     if (imp) return { found: true, pivots: piv, pct, ...imp };
     const corr = tryCorrection(piv);
     if (corr) return { found: true, pivots: piv, pct, ...corr };
@@ -3827,7 +3834,23 @@ body {
     return { sign, rules, score: (r1 ? 1 : 0) + (r2 ? 1 : 0) + (r3 ? 1 : 0), w1, w3, w5, p, seg: s };
   }
 
-  function tryImpulse(piv, lastClose) {
+  function waveVolumes(seg, candles) {
+    const v = [];
+    for (let k = 0; k < seg.length - 1; k++) {
+      const a = Math.min(seg[k].i, seg[k + 1].i);
+      const b = Math.max(seg[k].i, seg[k + 1].i);
+      let sum = 0;
+      let c = 0;
+      for (let i = a; i <= b; i++) {
+        sum += (candles[i] && candles[i].volume) || 0;
+        c++;
+      }
+      v.push(c ? sum / c : 0);
+    }
+    return v;
+  }
+
+  function tryImpulse(piv, lastClose, candles) {
     let best = null;
     for (let end = piv.length; end >= 6; end--) {
       const s = piv.slice(end - 6, end);
@@ -3841,10 +3864,10 @@ body {
     // Rule 1 (W2 < 100% of W1) is mandatory — a deeper retrace invalidates the
     // wave-1 low entirely; require it plus at least one other rule.
     if (!best || best.score < 2 || !best.rules[0].ok) return null;
-    return finishImpulse(best, lastClose);
+    return finishImpulse(best, lastClose, candles);
   }
 
-  function finishImpulse(b, lastClose) {
+  function finishImpulse(b, lastClose, candles) {
     const { sign, rules, p, w1, w3, w5, seg } = b;
     const w2retr = Math.abs(p[1] - p[2]) / (w1 || 1);
     const w4retr = Math.abs(p[3] - p[4]) / (w3 || 1);
@@ -3876,9 +3899,24 @@ body {
         `Possible ${dir} 5-wave impulse — ${b.score}/3 hard rules satisfied. ` +
         `Wave ${longest} is the extended wave (W3 ≈ ${w3ext.toFixed(2)}× W1). ` +
         `Wave 2 retraced ${(w2retr * 100).toFixed(0)}%, Wave 4 ${(w4retr * 100).toFixed(0)}% — alternation ${alternation ? 'present' : 'weak'}. ` +
-        `With Wave 5 in place, a 3-wave (A-B-C) correction is the textbook next move.`;
+        `If complete, this whole 5-wave move may itself be Wave 1 of a HIGHER degree — a larger Wave 2 (≈38–62% retrace) would typically follow before the next impulse.`;
     }
-    return { type: 'impulse', dir, score: b.score, rules, waves, targets, w2retr, w4retr, w3ext, longest, alternation, extending, summary };
+
+    // Volume-by-wave (the Elliott guideline: W3 should carry peak volume; a
+    // Wave-5 that prints on lighter volume than W3 is a classic exhaustion signal).
+    const wv = waveVolumes(seg, candles); // [W1..W5]
+    const maxV = Math.max.apply(null, wv) || 1;
+    const peakWave = wv.indexOf(maxV) + 1;
+    const w3v = wv[2] || 0;
+    const w5v = wv[4] || 0;
+    const w5div = w5v > 0 && w3v > 0 && w5v < w3v * 0.9;
+    let volNote;
+    if (peakWave === 3 && w5div) volNote = `Volume peaked on Wave 3 (textbook), and Wave 5 ran ~${Math.round((1 - w5v / w3v) * 100)}% lighter than Wave 3 — a classic exhaustion divergence near the end of an impulse.`;
+    else if (peakWave === 3) volNote = `Volume peaked on Wave 3 (textbook — the strongest wave). Wave 5 volume held up, so a weaker exhaustion signal.`;
+    else volNote = `Heaviest volume was in Wave ${peakWave}, not Wave 3 — atypical; a clean impulse usually carries peak volume in Wave 3.`;
+    const waveVol = wv.map((v) => v / maxV);
+
+    return { type: 'impulse', dir, score: b.score, rules, waves, targets, w2retr, w4retr, w3ext, longest, alternation, extending, waveVol, peakWave, w5div, volNote, summary };
   }
 
   function tryCorrection(piv) {
@@ -4836,10 +4874,16 @@ body {
     }
     const rules = (w.rules || []).map((r) => `<div class="ew-rule ${r.ok ? 'ok' : 'no'}">${r.ok ? '✓' : '✗'} ${r.name}</div>`).join('');
     const targets = (w.targets || []).map((t) => `<div class="ew-tgt"><span>${t.label}</span><b>${t.price.toFixed(2)}</b></div>`).join('');
+    const vol = w.waveVol && w.waveVol.length
+      ? `<div class="ew-h2">Volume per wave</div><div class="ew-vols">${w.waveVol
+          .map((rv, k) => `<div class="ew-vol ${k === w.peakWave - 1 ? 'peak' : ''}"><span class="ew-volbar"><i style="height:${Math.max(6, Math.round(rv * 100))}%"></i></span><b>${k + 1}</b></div>`)
+          .join('')}</div><div class="ew-cav">${w.volNote || ''}</div>`
+      : '';
     box.innerHTML =
       `<div class="ew-h">🌊 Elliott Wave <small>(beta · ${(w.pct * 100).toFixed(0)}% swings)</small></div>` +
       `<div class="ew-sum">${w.summary}</div>` +
       (rules ? `<div class="ew-rules">${rules}</div>` : '') +
+      vol +
       (targets ? `<div class="ew-h2">Fib targets for the next move</div><div class="ew-tgts">${targets}</div>` : '') +
       `<div class="ew-cav">Elliott counts are subjective and not predictive — one interpretation, educational only. Best read on weekly/monthly charts.</div>`;
   }
