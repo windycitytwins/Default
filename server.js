@@ -532,6 +532,38 @@ function readBody(req) {
     req.on('error', reject);
   });
 }
+// Robustly pull a JSON object out of model text (handles code fences, preamble,
+// and truncation — keeps every complete "key":"value" pair it can find).
+function extractJsonObject(text) {
+  let t = String(text || '').trim();
+  t = t.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+  const start = t.indexOf('{');
+  if (start > 0) t = t.slice(start);
+  try {
+    return JSON.parse(t);
+  } catch (_) {}
+  const end = t.lastIndexOf('}');
+  if (end > 0) {
+    try {
+      return JSON.parse(t.slice(0, end + 1));
+    } catch (_) {}
+  }
+  // truncation repair: collect every complete string key/value pair
+  const obj = {};
+  const re = /"([A-Za-z0-9_]+)"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+  let m;
+  let n = 0;
+  while ((m = re.exec(t))) {
+    try {
+      obj[m[1]] = JSON.parse('"' + m[2] + '"');
+    } catch (_) {
+      obj[m[1]] = m[2];
+    }
+    n++;
+  }
+  if (n) return obj;
+  throw new Error('no_json');
+}
 async function aiResearch(symbol, fields) {
   if (!ANTHROPIC_KEY) throw tagErr('AI research is disabled. Set ANTHROPIC_API_KEY (your Anthropic key) and restart the server to enable it.', 0, '');
   // gather grounding context from the free data sources
@@ -571,19 +603,26 @@ async function aiResearch(symbol, fields) {
   const res = await httpsPostJSON(
     'https://api.anthropic.com/v1/messages',
     { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
-    { model: ANTHROPIC_MODEL, max_tokens: 4096, system, messages: [{ role: 'user', content: user }] },
+    {
+      model: ANTHROPIC_MODEL,
+      max_tokens: 8192,
+      system,
+      // Prefill the assistant turn with "{" so the reply is pure JSON (no
+      // markdown fences or preamble to trip up parsing).
+      messages: [{ role: 'user', content: user }, { role: 'assistant', content: '{' }]
+    },
     120000
   );
   if (res.status !== 200) throw tagErr(`Anthropic API HTTP ${res.status}`, res.status, res.body);
   const j = JSON.parse(res.body);
   const text = (j.content && j.content[0] && j.content[0].text) || '';
-  const match = text.match(/\{[\s\S]*\}/);
   let obj;
   try {
-    obj = JSON.parse(match ? match[0] : text);
+    obj = extractJsonObject('{' + text);
   } catch (_) {
-    throw tagErr('AI returned unparseable output', 200, text.slice(0, 200));
+    throw tagErr('AI returned unparseable output', 200, text.slice(0, 300));
   }
+  if (!obj || !Object.keys(obj).length) throw tagErr('AI returned no fields', 200, text.slice(0, 300));
   return { fields: obj, model: ANTHROPIC_MODEL, company: ctx.companyName || ctx.name || symbol };
 }
 
@@ -765,4 +804,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { fromYahoo, fromStooq, fromNasdaq, fromNasdaqIntraday, fromNasdaqQuote, getQuote, fromTwelveData, fromNasdaqSummary, profileReport, edgarReport, aiResearch, searchSymbols, loadChart, diagnose, applyAdjustment, getYahooAuth };
+module.exports = { fromYahoo, fromStooq, fromNasdaq, fromNasdaqIntraday, fromNasdaqQuote, getQuote, fromTwelveData, fromNasdaqSummary, profileReport, edgarReport, aiResearch, extractJsonObject, searchSymbols, loadChart, diagnose, applyAdjustment, getYahooAuth };
