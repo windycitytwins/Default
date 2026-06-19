@@ -278,13 +278,26 @@ body {
 .tf-ribbon {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 8px;
   padding: 5px 8px;
   border-bottom: 1px solid var(--border);
   background: rgba(13, 18, 33, 0.5);
 }
+.tf-intervals {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  overflow-x: auto;
+  min-width: 0;
+  flex: 1 1 auto;
+  scrollbar-width: thin;
+}
+.tf-intervals::-webkit-scrollbar { height: 5px; }
+.tf-intervals::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.tf-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 .tf-btn {
   background: transparent;
+  flex: 0 0 auto;
   border: 1px solid transparent;
   color: var(--muted);
   font-size: 12px;

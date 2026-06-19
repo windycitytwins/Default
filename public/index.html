@@ -96,18 +96,27 @@
         </button>
       </nav>
       <div class="chart-col">
-      <div class="tf-ribbon" id="tfRibbon" role="tablist" aria-label="Chart timeframe">
-        <button class="tf-btn" data-range="1d" title="1 day · 2-minute bars">1D</button>
-        <button class="tf-btn" data-range="5d" title="5 days · 15-minute bars">5D</button>
-        <button class="tf-btn" data-range="1mo" title="1 month · 30-minute bars">1M</button>
-        <button class="tf-btn" data-range="6mo" title="6 months · daily bars">6M</button>
-        <button class="tf-btn active" data-range="1y" title="1 year · daily bars">1Y</button>
-        <button class="tf-btn" data-range="5y" title="5 years · weekly bars">5Y</button>
-        <button class="tf-btn" data-range="max" title="Max · monthly bars">All</button>
-        <span class="tf-div"></span>
-        <button class="tf-meta tf-ind" id="indicatorsBtn" title="Indicators, moving averages & chart style">ƒ Indicators</button>
-        <span class="tf-spacer"></span>
-        <button class="tf-meta" id="csvExportBtn" title="Download the visible candles as a CSV file">⤓ CSV</button>
+      <div class="tf-ribbon" id="tfRibbon" role="tablist" aria-label="Chart interval">
+        <div class="tf-intervals">
+          <button class="tf-btn" data-interval="1m" data-range="5d" title="1 minute">1m</button>
+          <button class="tf-btn" data-interval="3m" data-range="5d" title="3 minutes">3m</button>
+          <button class="tf-btn" data-interval="5m" data-range="1mo" title="5 minutes">5m</button>
+          <button class="tf-btn" data-interval="10m" data-range="1mo" title="10 minutes">10m</button>
+          <button class="tf-btn" data-interval="15m" data-range="1mo" title="15 minutes">15m</button>
+          <button class="tf-btn" data-interval="30m" data-range="1mo" title="30 minutes">30m</button>
+          <button class="tf-btn" data-interval="45m" data-range="1mo" title="45 minutes">45m</button>
+          <button class="tf-btn" data-interval="65m" data-range="1mo" title="65 minutes">65m</button>
+          <button class="tf-btn" data-interval="1h" data-range="6mo" title="1 hour">1h</button>
+          <button class="tf-btn" data-interval="2h" data-range="1y" title="2 hours">2h</button>
+          <button class="tf-btn" data-interval="4h" data-range="2y" title="4 hours">4h</button>
+          <button class="tf-btn active" data-interval="1d" data-range="1y" title="1 day">D</button>
+          <button class="tf-btn" data-interval="1wk" data-range="5y" title="1 week">W</button>
+          <button class="tf-btn" data-interval="1mo" data-range="max" title="1 month">M</button>
+        </div>
+        <div class="tf-actions">
+          <button class="tf-meta tf-ind" id="indicatorsBtn" title="Indicators, moving averages & chart style">ƒ Indicators</button>
+          <button class="tf-meta" id="csvExportBtn" title="Download the visible candles as a CSV file">⤓ CSV</button>
+        </div>
       </div>
       <div id="indicatorsPanel" class="ind-pop" style="display:none">
         <div class="ind-pop-head">

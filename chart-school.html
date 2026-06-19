@@ -289,13 +289,26 @@ body {
 .tf-ribbon {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 8px;
   padding: 5px 8px;
   border-bottom: 1px solid var(--border);
   background: rgba(13, 18, 33, 0.5);
 }
+.tf-intervals {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  overflow-x: auto;
+  min-width: 0;
+  flex: 1 1 auto;
+  scrollbar-width: thin;
+}
+.tf-intervals::-webkit-scrollbar { height: 5px; }
+.tf-intervals::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.tf-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 .tf-btn {
   background: transparent;
+  flex: 0 0 auto;
   border: 1px solid transparent;
   color: var(--muted);
   font-size: 12px;
@@ -940,18 +953,27 @@ body {
         </button>
       </nav>
       <div class="chart-col">
-      <div class="tf-ribbon" id="tfRibbon" role="tablist" aria-label="Chart timeframe">
-        <button class="tf-btn" data-range="1d" title="1 day · 2-minute bars">1D</button>
-        <button class="tf-btn" data-range="5d" title="5 days · 15-minute bars">5D</button>
-        <button class="tf-btn" data-range="1mo" title="1 month · 30-minute bars">1M</button>
-        <button class="tf-btn" data-range="6mo" title="6 months · daily bars">6M</button>
-        <button class="tf-btn active" data-range="1y" title="1 year · daily bars">1Y</button>
-        <button class="tf-btn" data-range="5y" title="5 years · weekly bars">5Y</button>
-        <button class="tf-btn" data-range="max" title="Max · monthly bars">All</button>
-        <span class="tf-div"></span>
-        <button class="tf-meta tf-ind" id="indicatorsBtn" title="Indicators, moving averages & chart style">ƒ Indicators</button>
-        <span class="tf-spacer"></span>
-        <button class="tf-meta" id="csvExportBtn" title="Download the visible candles as a CSV file">⤓ CSV</button>
+      <div class="tf-ribbon" id="tfRibbon" role="tablist" aria-label="Chart interval">
+        <div class="tf-intervals">
+          <button class="tf-btn" data-interval="1m" data-range="5d" title="1 minute">1m</button>
+          <button class="tf-btn" data-interval="3m" data-range="5d" title="3 minutes">3m</button>
+          <button class="tf-btn" data-interval="5m" data-range="1mo" title="5 minutes">5m</button>
+          <button class="tf-btn" data-interval="10m" data-range="1mo" title="10 minutes">10m</button>
+          <button class="tf-btn" data-interval="15m" data-range="1mo" title="15 minutes">15m</button>
+          <button class="tf-btn" data-interval="30m" data-range="1mo" title="30 minutes">30m</button>
+          <button class="tf-btn" data-interval="45m" data-range="1mo" title="45 minutes">45m</button>
+          <button class="tf-btn" data-interval="65m" data-range="1mo" title="65 minutes">65m</button>
+          <button class="tf-btn" data-interval="1h" data-range="6mo" title="1 hour">1h</button>
+          <button class="tf-btn" data-interval="2h" data-range="1y" title="2 hours">2h</button>
+          <button class="tf-btn" data-interval="4h" data-range="2y" title="4 hours">4h</button>
+          <button class="tf-btn active" data-interval="1d" data-range="1y" title="1 day">D</button>
+          <button class="tf-btn" data-interval="1wk" data-range="5y" title="1 week">W</button>
+          <button class="tf-btn" data-interval="1mo" data-range="max" title="1 month">M</button>
+        </div>
+        <div class="tf-actions">
+          <button class="tf-meta tf-ind" id="indicatorsBtn" title="Indicators, moving averages & chart style">ƒ Indicators</button>
+          <button class="tf-meta" id="csvExportBtn" title="Download the visible candles as a CSV file">⤓ CSV</button>
+        </div>
       </div>
       <div id="indicatorsPanel" class="ind-pop" style="display:none">
         <div class="ind-pop-head">
@@ -1903,6 +1925,7 @@ body {
       // Anchored by absolute time (ms) + price so they stay put across timeframe
       // changes and live updates. type ∈ trend|ray|hline|hray|rect|fib|arrow|text|measure
       this.drawings = [];
+      this.autoDrawings = []; // system-drawn (auto-fib): rendered, not editable
       this.tool = null; // active drawing tool (null = crosshair/pan)
       this.magnet = false; // snap anchors to nearest OHLC
       this.draft = null; // in-progress drawing
@@ -2056,6 +2079,7 @@ body {
       this.markers = [];
       this.annotations = [];
       this.highlights = [];
+      this.autoDrawings = [];
       this.requestRender();
     }
     // ---- manual drawing tools ----------------------------------------------
@@ -2072,6 +2096,12 @@ body {
     }
     setDrawColor(c) {
       this.drawColor = c || '#5b8cff';
+    }
+    /** Auto-Fibonacci: rendered with the same clean look as a hand-drawn fib but
+     *  not selectable/persisted. Pass null to clear. a = swing start, b = end. */
+    setAutoFib(a, b, color) {
+      this.autoDrawings = a && b ? [{ type: 'fib', a, b, color: color || '#5b8cff' }] : [];
+      this.requestRender();
     }
     /** Recolour the currently-selected drawing (used by the colour picker). */
     recolorSelected(c) {
@@ -3053,7 +3083,8 @@ body {
 
     _drawDrawings(L, yOf) {
       const ctx = this.ctx;
-      const list = this.draft ? this.drawings.concat([this.draft]) : this.drawings;
+      let list = this.autoDrawings.concat(this.drawings);
+      if (this.draft) list = list.concat([this.draft]);
       if (!list.length) return;
       const R = L.price;
       const X = (t) => this._xOfT(t, R);
@@ -5936,30 +5967,22 @@ body {
         });
       });
     }
-    // Auto Fibonacci retracement on the dominant swing (largest ZigZag leg).
-    if (ex.fib) {
-      const piv = ta.zigzag(candles, candles.length > 220 ? 0.08 : 0.06);
-      if (piv.length >= 2) {
-        let bi = 1, bAmp = 0;
-        for (let i = 1; i < piv.length; i++) {
-          const amp = Math.abs(piv[i].price - piv[i - 1].price);
-          if (amp > bAmp) { bAmp = amp; bi = i; }
-        }
-        const a = piv[bi - 1].price, b = piv[bi].price;
-        const up = b > a;
-        const hi = Math.max(a, b), lo = Math.min(a, b), rng = hi - lo || 1;
-        // 0% sits at the swing's end, 100% at its start (TradingView orientation).
-        [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1].forEach((r) => {
-          const price = up ? hi - r * rng : lo + r * rng;
-          const mid = r > 0 && r < 1;
-          chart.setHLine('fibr' + String(r).replace('.', ''), {
-            price,
-            color: mid ? 'rgba(255,200,90,0.55)' : 'rgba(180,200,255,0.6)',
-            label: (r * 100).toFixed(1).replace(/\.0$/, '') + '%',
-            dash: [4, 4]
-          });
-        });
-      }
+    // Auto Fibonacci retracement on the DOMINANT swing — the extreme high and
+    // low of the loaded data (the move a trader would actually draw in TV).
+    if (ex.fib && candles.length) {
+      let hi = -Infinity, lo = Infinity, hiI = 0, loI = 0;
+      candles.forEach((c, i) => {
+        if (c.high > hi) { hi = c.high; hiI = i; }
+        if (c.low < lo) { lo = c.low; loI = i; }
+      });
+      // 0% sits at the most recent extreme (start = the earlier one), so it works
+      // for both up-swings (retrace from the high) and down-swings (from the low).
+      const lastIsHigh = hiI > loI;
+      const start = lastIsHigh ? { t: candles[loI].time, price: lo } : { t: candles[hiI].time, price: hi };
+      const end = lastIsHigh ? { t: candles[hiI].time, price: hi } : { t: candles[loI].time, price: lo };
+      chart.setAutoFib(start, end, 'rgba(150,180,255,0.9)');
+    } else {
+      chart.setAutoFib(null);
     }
     const ewControls = $('#ewControls');
     if (ewControls) ewControls.style.display = ex.ew ? 'block' : 'none';
@@ -6628,18 +6651,17 @@ body {
     document.querySelectorAll('.chip[data-sym]').forEach((c) =>
       c.addEventListener('click', () => loadSymbol(c.dataset.sym))
     );
-    // Timeframe ribbon (TradingView-style interval buttons)
-    const TF_MAP = {
-      '1d': ['1d', '2m'], '5d': ['5d', '15m'], '1mo': ['1mo', '30m'],
-      '6mo': ['6mo', '1d'], '1y': ['1y', '1d'], '5y': ['5y', '1wk'], 'max': ['max', '1mo']
-    };
-    document.querySelectorAll('.tf-btn[data-range]').forEach((btn) => {
+    // Interval ribbon (TradingView-style: 1m … 4h, D, W, M). Each button sets the
+    // bar size + a sensible amount of history; the server resamples odd sizes.
+    document.querySelectorAll('.tf-btn[data-interval]').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        const v = btn.dataset.range;
         document.querySelectorAll('.tf-btn').forEach((b) => b.classList.toggle('active', b === btn));
-        [state.range, state.interval] = TF_MAP[v] || ['1y', '1d'];
+        state.interval = btn.dataset.interval;
+        state.range = btn.dataset.range;
         await loadSymbol(state.symbol);
-        chart.showAll(); // fit the full selected range so the change is visible
+        // intraday: a recent window reads better than thousands of squished bars
+        if (/(m|h)$/.test(state.interval)) chart.resetView();
+        else chart.showAll();
       });
     });
     $('#csvExportBtn').addEventListener('click', exportCsv);

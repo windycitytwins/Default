@@ -79,6 +79,7 @@
       // Anchored by absolute time (ms) + price so they stay put across timeframe
       // changes and live updates. type ∈ trend|ray|hline|hray|rect|fib|arrow|text|measure
       this.drawings = [];
+      this.autoDrawings = []; // system-drawn (auto-fib): rendered, not editable
       this.tool = null; // active drawing tool (null = crosshair/pan)
       this.magnet = false; // snap anchors to nearest OHLC
       this.draft = null; // in-progress drawing
@@ -232,6 +233,7 @@
       this.markers = [];
       this.annotations = [];
       this.highlights = [];
+      this.autoDrawings = [];
       this.requestRender();
     }
     // ---- manual drawing tools ----------------------------------------------
@@ -248,6 +250,12 @@
     }
     setDrawColor(c) {
       this.drawColor = c || '#5b8cff';
+    }
+    /** Auto-Fibonacci: rendered with the same clean look as a hand-drawn fib but
+     *  not selectable/persisted. Pass null to clear. a = swing start, b = end. */
+    setAutoFib(a, b, color) {
+      this.autoDrawings = a && b ? [{ type: 'fib', a, b, color: color || '#5b8cff' }] : [];
+      this.requestRender();
     }
     /** Recolour the currently-selected drawing (used by the colour picker). */
     recolorSelected(c) {
@@ -1229,7 +1237,8 @@
 
     _drawDrawings(L, yOf) {
       const ctx = this.ctx;
-      const list = this.draft ? this.drawings.concat([this.draft]) : this.drawings;
+      let list = this.autoDrawings.concat(this.drawings);
+      if (this.draft) list = list.concat([this.draft]);
       if (!list.length) return;
       const R = L.price;
       const X = (t) => this._xOfT(t, R);

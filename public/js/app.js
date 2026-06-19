@@ -535,30 +535,22 @@
         });
       });
     }
-    // Auto Fibonacci retracement on the dominant swing (largest ZigZag leg).
-    if (ex.fib) {
-      const piv = ta.zigzag(candles, candles.length > 220 ? 0.08 : 0.06);
-      if (piv.length >= 2) {
-        let bi = 1, bAmp = 0;
-        for (let i = 1; i < piv.length; i++) {
-          const amp = Math.abs(piv[i].price - piv[i - 1].price);
-          if (amp > bAmp) { bAmp = amp; bi = i; }
-        }
-        const a = piv[bi - 1].price, b = piv[bi].price;
-        const up = b > a;
-        const hi = Math.max(a, b), lo = Math.min(a, b), rng = hi - lo || 1;
-        // 0% sits at the swing's end, 100% at its start (TradingView orientation).
-        [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1].forEach((r) => {
-          const price = up ? hi - r * rng : lo + r * rng;
-          const mid = r > 0 && r < 1;
-          chart.setHLine('fibr' + String(r).replace('.', ''), {
-            price,
-            color: mid ? 'rgba(255,200,90,0.55)' : 'rgba(180,200,255,0.6)',
-            label: (r * 100).toFixed(1).replace(/\.0$/, '') + '%',
-            dash: [4, 4]
-          });
-        });
-      }
+    // Auto Fibonacci retracement on the DOMINANT swing — the extreme high and
+    // low of the loaded data (the move a trader would actually draw in TV).
+    if (ex.fib && candles.length) {
+      let hi = -Infinity, lo = Infinity, hiI = 0, loI = 0;
+      candles.forEach((c, i) => {
+        if (c.high > hi) { hi = c.high; hiI = i; }
+        if (c.low < lo) { lo = c.low; loI = i; }
+      });
+      // 0% sits at the most recent extreme (start = the earlier one), so it works
+      // for both up-swings (retrace from the high) and down-swings (from the low).
+      const lastIsHigh = hiI > loI;
+      const start = lastIsHigh ? { t: candles[loI].time, price: lo } : { t: candles[hiI].time, price: hi };
+      const end = lastIsHigh ? { t: candles[hiI].time, price: hi } : { t: candles[loI].time, price: lo };
+      chart.setAutoFib(start, end, 'rgba(150,180,255,0.9)');
+    } else {
+      chart.setAutoFib(null);
     }
     const ewControls = $('#ewControls');
     if (ewControls) ewControls.style.display = ex.ew ? 'block' : 'none';
@@ -1227,18 +1219,17 @@
     document.querySelectorAll('.chip[data-sym]').forEach((c) =>
       c.addEventListener('click', () => loadSymbol(c.dataset.sym))
     );
-    // Timeframe ribbon (TradingView-style interval buttons)
-    const TF_MAP = {
-      '1d': ['1d', '2m'], '5d': ['5d', '15m'], '1mo': ['1mo', '30m'],
-      '6mo': ['6mo', '1d'], '1y': ['1y', '1d'], '5y': ['5y', '1wk'], 'max': ['max', '1mo']
-    };
-    document.querySelectorAll('.tf-btn[data-range]').forEach((btn) => {
+    // Interval ribbon (TradingView-style: 1m … 4h, D, W, M). Each button sets the
+    // bar size + a sensible amount of history; the server resamples odd sizes.
+    document.querySelectorAll('.tf-btn[data-interval]').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        const v = btn.dataset.range;
         document.querySelectorAll('.tf-btn').forEach((b) => b.classList.toggle('active', b === btn));
-        [state.range, state.interval] = TF_MAP[v] || ['1y', '1d'];
+        state.interval = btn.dataset.interval;
+        state.range = btn.dataset.range;
         await loadSymbol(state.symbol);
-        chart.showAll(); // fit the full selected range so the change is visible
+        // intraday: a recent window reads better than thousands of squished bars
+        if (/(m|h)$/.test(state.interval)) chart.resetView();
+        else chart.showAll();
       });
     });
     $('#csvExportBtn').addEventListener('click', exportCsv);

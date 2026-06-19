@@ -650,9 +650,20 @@ function providersFor(interval) {
   }
   return list;
 }
-// Resample daily candles into weekly/monthly/quarterly OHLCV (for the keyless
-// daily sources, which ignore the requested interval).
+// Resample candles into a coarser interval (for sources that only serve a few
+// base sizes). TradingView-style intervals → the base size we actually fetch.
+const FETCH_BASE = {
+  '1m': '1m', '3m': '1m', '5m': '5m', '10m': '5m', '15m': '15m',
+  '30m': '30m', '45m': '15m', '65m': '5m', '1h': '60m', '2h': '60m',
+  '4h': '60m', '1d': '1d', '1wk': '1wk', '1mo': '1mo', '3mo': '3mo'
+};
+function intervalMinutes(interval) {
+  const m = { '1m': 1, '2m': 2, '3m': 3, '5m': 5, '10m': 10, '15m': 15, '30m': 30, '45m': 45, '60m': 60, '65m': 65, '90m': 90, '1h': 60, '2h': 120, '4h': 240 };
+  return m[interval] || null;
+}
 function periodKey(ms, interval) {
+  const mins = intervalMinutes(interval);
+  if (mins) return Math.floor(ms / (mins * 60000)); // fixed-width intraday buckets
   const d = new Date(ms);
   const y = d.getUTCFullYear();
   if (interval === '1mo') return y * 12 + d.getUTCMonth();
@@ -687,16 +698,21 @@ async function loadChart(symbol, range, interval, noQuote) {
   const hit = cacheGet(key);
   if (hit) return { data: hit, errors: [], cached: true };
   const errors = [];
-  for (const [name, fn] of providersFor(interval)) {
+  const fetchInterval = FETCH_BASE[interval] || interval;
+  for (const [name, fn] of providersFor(fetchInterval)) {
     try {
-      const data = await fn(symbol, range, interval);
+      const data = await fn(symbol, range, fetchInterval);
       if (errors.length) data.note = 'Primary source busy; served by ' + data.source + '.';
-      // If a daily-only source (Nasdaq/Stooq) was used for a weekly/monthly
-      // request, resample the candles so the timeframe is actually honoured.
-      if (['1wk', '1mo', '3mo'].includes(interval) && data.interval !== interval) {
-        data.candles = aggregateCandles(data.candles, interval);
-        data.interval = interval;
-      }
+      // Resample to the requested interval when the source served a finer/daily
+      // base size (Nasdaq/Stooq are daily-only; intraday odd sizes like 3m/45m/
+      // 2h are aggregated from a base size Yahoo/Nasdaq actually provide).
+      const reqMin = intervalMinutes(interval);
+      const dataMin = intervalMinutes(data.interval);
+      const needResample =
+        data.interval !== interval &&
+        (['1wk', '1mo', '3mo'].includes(interval) || (reqMin && (!dataMin || dataMin < reqMin)));
+      if (needResample) data.candles = aggregateCandles(data.candles, interval);
+      data.interval = interval;
       // Daily sources (Nasdaq/Stooq) only have completed bars — enrich with a
       // live quote so the header shows the CURRENT price, not yesterday's close.
       // (Skipped for bulk screener requests via noQuote to halve provider calls.)
