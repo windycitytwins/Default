@@ -108,6 +108,11 @@ body {
 .layout.sb-collapsed.wl-collapsed { grid-template-columns: 1fr 0 0; }
 .layout.sb-collapsed .tutor-pane { display: none; }
 .layout.wl-collapsed .wl-pane { display: none; }
+/* Pin each pane to its own column so hiding the panel (display:none removes it
+   from the grid) can't let the watchlist auto-place into the collapsed column. */
+.chart-pane { grid-column: 1; }
+.tutor-pane { grid-column: 2; }
+.wl-pane { grid-column: 3; }
 .tab-collapse { margin-left: auto; font-weight: 700; }
 .sidebar-reopen, .wl-reopen {
   position: absolute;
@@ -423,11 +428,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px 16px;
+  flex-wrap: wrap;
   padding: 8px 16px;
   border-top: 1px solid var(--border);
   background: var(--panel);
   font-size: 12px;
 }
+.chart-footer .chart-hint { margin-left: auto; }
 .data-status { font-weight: 500; }
 .data-status.good { color: #6fd3a8; }
 .data-status.warn { color: var(--gold); }
@@ -810,6 +818,7 @@ body {
 @media (max-width: 920px) {
   body { overflow: auto; }
   .layout, .layout.sb-collapsed, .layout.wl-collapsed { grid-template-columns: 1fr; }
+  .chart-pane, .tutor-pane, .wl-pane { grid-column: 1; }
   .chart-pane { border-right: none; border-bottom: 1px solid var(--border); height: 56vh; }
   .tutor-pane { height: auto; }
   .wl-pane { height: auto; border-left: none; border-top: 1px solid var(--border); }
