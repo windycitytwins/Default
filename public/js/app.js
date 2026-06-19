@@ -248,6 +248,87 @@
     toast(`⬇ ${d.candles.length} rows exported to CSV`);
   }
 
+  // ---- interactive legend (TradingView-style per-indicator rows) -----------
+  const LU = '#26a17b';
+  const LD = '#e0566a';
+  let _legendEls = null;
+  const _legendRows = new Map(); // key -> { el, dot, name, val }
+  function legendNum(n) {
+    if (n == null || !isFinite(n)) return '—';
+    return Math.abs(n) >= 1000 ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : n.toFixed(2);
+  }
+  function legendVol(n) {
+    if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+    return String(n || 0);
+  }
+  function renderHtmlLegend(model) {
+    const root = $('#chartLegend');
+    if (!root || !model) return;
+    if (!_legendEls) {
+      root.innerHTML =
+        '<div class="cl-head"><span class="cl-sym"></span><span class="cl-meta"></span><span class="cl-sample"></span></div>' +
+        '<div class="cl-ohlc"></div><div class="cl-rows"></div>';
+      _legendEls = {
+        sym: root.querySelector('.cl-sym'), meta: root.querySelector('.cl-meta'),
+        sample: root.querySelector('.cl-sample'), ohlc: root.querySelector('.cl-ohlc'), rows: root.querySelector('.cl-rows')
+      };
+    }
+    const E = _legendEls;
+    E.sym.textContent = model.symbol || '';
+    E.meta.textContent = [model.interval, model.exchange].filter(Boolean).join(' · ');
+    E.sample.textContent = model.synthetic ? 'SAMPLE' : '';
+    const vc = model.up ? LU : LD;
+    const cc = model.chg >= 0 ? LU : LD;
+    E.ohlc.innerHTML =
+      `<span class="k">O</span><span style="color:${vc}">${legendNum(model.o)}</span>` +
+      `<span class="k">H</span><span style="color:${vc}">${legendNum(model.h)}</span>` +
+      `<span class="k">L</span><span style="color:${vc}">${legendNum(model.l)}</span>` +
+      `<span class="k">C</span><span style="color:${vc}">${legendNum(model.c)}</span>` +
+      `<span style="color:${cc}">${model.chg >= 0 ? '+' : ''}${legendNum(model.chg)} (${model.chg >= 0 ? '+' : ''}${model.chgPct.toFixed(2)}%)</span>` +
+      `<span class="k">Vol</span><span>${legendVol(model.vol)}</span>`;
+    const keys = model.rows.map((r) => r.key);
+    for (const [k, row] of _legendRows) {
+      if (!keys.includes(k)) {
+        row.el.remove();
+        _legendRows.delete(k);
+      }
+    }
+    for (const r of model.rows) {
+      let row = _legendRows.get(r.key);
+      if (!row) {
+        const el = el2('div', 'cl-row');
+        el.innerHTML =
+          '<span class="cl-dot"></span><span class="cl-name"></span><span class="cl-val"></span>' +
+          '<span class="cl-actions"><button class="cl-btn cl-eye" title="Hide / show" aria-label="hide">◉</button>' +
+          '<button class="cl-btn cl-del" title="Remove indicator" aria-label="remove">✕</button></span>';
+        row = { el, dot: el.querySelector('.cl-dot'), name: el.querySelector('.cl-name'), val: el.querySelector('.cl-val') };
+        el.querySelector('.cl-eye').addEventListener('click', () => chart.toggleHidden(r.key));
+        el.querySelector('.cl-del').addEventListener('click', () => removeIndicator(r.key));
+        _legendRows.set(r.key, row);
+      }
+      row.dot.style.background = r.color;
+      row.name.textContent = r.name;
+      row.val.textContent = legendNum(r.value);
+      row.el.classList.toggle('off', !!r.hidden);
+      E.rows.appendChild(row.el); // keep model order
+    }
+  }
+  function el2(tag, cls) {
+    const n = document.createElement(tag);
+    n.className = cls;
+    return n;
+  }
+  // Remove an indicator from the legend → untick its toggle and re-apply.
+  function removeIndicator(key) {
+    if (key in state.explore) state.explore[key] = false;
+    if (chart.hiddenOverlays) chart.hiddenOverlays.delete(key);
+    const cb = document.querySelector('[data-toggle="' + key + '"]');
+    if (cb) cb.checked = false;
+    applyExplore(true);
+  }
+
   // ---- live polling --------------------------------------------------------
   let refreshing = false;
   function markUpdated(data) {
@@ -1448,6 +1529,8 @@
   async function boot() {
     restore();
     chart = new window.StockChart($('#chart'), { initialBars: 130 });
+    chart.domLegend = true;
+    chart.onLegend = renderHtmlLegend;
     bindUI();
     renderLessonList();
     syncTabs();

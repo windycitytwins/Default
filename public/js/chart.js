@@ -86,6 +86,9 @@
       this.selected = null; // id of the selected drawing
       this._drawSeq = 0;
       this.drawColor = '#5b8cff'; // active colour for new drawings
+      this.hiddenOverlays = new Set(); // keys hidden via the legend eye toggle
+      this.domLegend = false; // render the legend as an interactive HTML overlay
+      this.onLegend = null; // hook(model) called each frame when domLegend is on
 
       this.visStart = 0;
       this.visCount = 120;
@@ -234,6 +237,7 @@
       this.annotations = [];
       this.highlights = [];
       this.autoDrawings = [];
+      this.hiddenOverlays.clear();
       this.requestRender();
     }
     // ---- manual drawing tools ----------------------------------------------
@@ -578,12 +582,21 @@
       this._drawTimeAxis(L);
       this._drawCrosshair(L, yOf);
       this._drawLastPrice(L, yOf);
-      this._drawLegend(L);
+      if (this.domLegend && !this._exporting) {
+        if (this.onLegend) {
+          let i = this.hover && this.hover.index != null ? this.hover.index : this.candles.length - 1;
+          i = Math.max(0, Math.min(this.candles.length - 1, i));
+          this.onLegend(this._legendModel(i));
+        }
+      } else {
+        this._drawLegend(L);
+      }
     }
 
     _drawEmaBands(L, yOf) {
       const ctx = this.ctx;
       const { s, e } = this._visible();
+      if (this.hiddenOverlays.has('emaband')) return;
       for (const [, b] of this.emaBands) {
         ctx.save();
         ctx.beginPath();
@@ -636,7 +649,8 @@
     _drawBands(L, yOf) {
       const ctx = this.ctx;
       const { s, e } = this._visible();
-      for (const [, b] of this.bands) {
+      for (const [id, b] of this.bands) {
+        if (this.hiddenOverlays.has(b.key || id)) continue;
         ctx.save();
         ctx.beginPath();
         ctx.rect(L.price.x, L.price.y, L.price.w, L.price.h);
@@ -877,7 +891,8 @@
       ctx.beginPath();
       ctx.rect(L.price.x, L.price.y, L.price.w, L.price.h);
       ctx.clip();
-      for (const [, ov] of this.overlays) {
+      for (const [id, ov] of this.overlays) {
+        if (this.hiddenOverlays.has(this._ovKey(id, ov))) continue;
         ctx.strokeStyle = ov.color;
         ctx.lineWidth = ov.width || 1.6;
         ctx.setLineDash(ov.dash || []);
@@ -1559,9 +1574,12 @@
         if (v == null || !isFinite(v) || v < this._scale.min || v > this._scale.max) return;
         tags.push({ y: yOf(v), v, color });
       };
-      for (const [, ov] of this.overlays) add(ov.data[i], ov.color);
+      for (const [id, ov] of this.overlays) {
+        if (this.hiddenOverlays.has(this._ovKey(id, ov))) continue;
+        add(ov.data[i], ov.color);
+      }
       for (const [, b] of this.emaBands) {
-        if (!b.legend) continue;
+        if (!b.legend || this.hiddenOverlays.has('emaband')) continue;
         add(b.fast[i], b.legend[0].color);
         add(b.slow[i], b.legend[1].color);
       }
@@ -1646,7 +1664,9 @@
     toPNG() {
       const h = this.hover;
       this.hover = null;
+      this._exporting = true; // force the canvas legend into the snapshot
       this.render();
+      this._exporting = false;
       const blob = new Promise((resolve) => {
         try {
           this.canvas.toBlob((b) => resolve(b), 'image/png');
@@ -1705,6 +1725,49 @@
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'left';
       ctx.fillText(dtag, dx + 6, dy + 12);
+    }
+
+    /** Toggle an indicator's visibility from the legend eye control. */
+    toggleHidden(key) {
+      if (this.hiddenOverlays.has(key)) this.hiddenOverlays.delete(key);
+      else this.hiddenOverlays.add(key);
+      this.requestRender();
+    }
+    _ovKey(id, ov) {
+      return /^fib\d+$/.test(id) ? 'fibema' : (ov && ov.key) || id;
+    }
+    /** Structured legend data shared by the canvas legend and the HTML overlay. */
+    _legendModel(i) {
+      const m = this.meta || {};
+      const c = this.candles[i];
+      if (!c) return null;
+      const prevC = i > 0 ? this.candles[i - 1].close : c.open;
+      const chg = c.close - prevC;
+      const chgPct = prevC ? (chg / prevC) * 100 : 0;
+      const rows = [];
+      const seen = new Set();
+      for (const [id, ov] of this.overlays) {
+        const fib = /^fib\d+$/.test(id);
+        const key = this._ovKey(id, ov);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        rows.push({ key, name: fib ? 'Fib EMA 8–55' : ov.label || id, color: ov.color, value: ov.data[i], hidden: this.hiddenOverlays.has(key) });
+      }
+      for (const [, b] of this.emaBands) {
+        if (!b.legend || seen.has('emaband')) continue;
+        seen.add('emaband');
+        rows.push({ key: 'emaband', name: 'EMA ' + b.legend[0].period + '/' + b.legend[1].period + ' ribbon', color: b.legend[0].color, value: b.fast[i], hidden: this.hiddenOverlays.has('emaband') });
+      }
+      for (const [id, bb] of this.bands) {
+        const key = bb.key || id;
+        if (seen.has(key) || !bb.mid) continue;
+        seen.add(key);
+        rows.push({ key, name: bb.name || 'BB 20, 2', color: bb.lineColor || '#8aa6d0', value: bb.mid[i], hidden: this.hiddenOverlays.has(key) });
+      }
+      return {
+        symbol: m.symbol || '', interval: m.interval || '', exchange: m.exchange || '', synthetic: !!m.synthetic,
+        o: c.open, h: c.high, l: c.low, c: c.close, chg, chgPct, vol: c.volume, up: c.close >= c.open, rows
+      };
     }
 
     _drawLegend(L) {

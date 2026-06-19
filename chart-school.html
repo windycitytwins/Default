@@ -395,6 +395,45 @@ body {
 }
 .chart-export:hover { opacity: 1; border-color: var(--accent); }
 
+/* interactive top-left legend (TradingView-style per-indicator rows) */
+.chart-legend {
+  position: absolute;
+  top: 7px;
+  left: 10px;
+  z-index: 5;
+  pointer-events: none;
+  font-size: 12px;
+  line-height: 1.35;
+  max-width: 64%;
+  user-select: none;
+}
+.cl-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.cl-sym { font-weight: 700; font-size: 13px; color: var(--text); }
+.cl-meta { color: var(--muted); font-size: 11.5px; }
+.cl-sample { color: var(--down); font-weight: 700; font-size: 10.5px; letter-spacing: 0.04em; }
+.cl-ohlc { font-size: 11.5px; margin: 1px 0 2px; display: flex; flex-wrap: wrap; gap: 0 5px; }
+.cl-ohlc .k { color: var(--muted); }
+.cl-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 17px;
+  width: fit-content;
+  max-width: 100%;
+  pointer-events: auto;
+  border-radius: 4px;
+  padding: 0 5px 0 2px;
+}
+.cl-row:hover { background: rgba(28, 38, 62, 0.82); }
+.cl-row.off { opacity: 0.4; }
+.cl-dot { width: 11px; height: 3px; border-radius: 2px; flex: 0 0 auto; }
+.cl-name { color: #c2cad9; font-size: 11.5px; white-space: nowrap; }
+.cl-val { color: var(--text); font-variant-numeric: tabular-nums; font-size: 11.5px; }
+.cl-actions { display: none; align-items: center; gap: 1px; margin-left: 3px; }
+.cl-row:hover .cl-actions { display: flex; }
+.cl-btn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 1px 3px; font-size: 12px; line-height: 1; border-radius: 3px; }
+.cl-btn:hover { color: var(--text); background: rgba(120, 150, 230, 0.18); }
+
 .toast {
   position: fixed;
   bottom: 26px;
@@ -1045,6 +1084,7 @@ body {
       </div>
       <div class="chart-host">
         <div id="chart"></div>
+        <div id="chartLegend" class="chart-legend"></div>
         <button id="exportChartBtn" class="chart-export" title="Copy chart image to clipboard (downloads if copy is blocked)">📷 Copy</button>
         <div id="chartError" class="chart-error">
           <div class="err-card">
@@ -1941,6 +1981,9 @@ body {
       this.selected = null; // id of the selected drawing
       this._drawSeq = 0;
       this.drawColor = '#5b8cff'; // active colour for new drawings
+      this.hiddenOverlays = new Set(); // keys hidden via the legend eye toggle
+      this.domLegend = false; // render the legend as an interactive HTML overlay
+      this.onLegend = null; // hook(model) called each frame when domLegend is on
 
       this.visStart = 0;
       this.visCount = 120;
@@ -2089,6 +2132,7 @@ body {
       this.annotations = [];
       this.highlights = [];
       this.autoDrawings = [];
+      this.hiddenOverlays.clear();
       this.requestRender();
     }
     // ---- manual drawing tools ----------------------------------------------
@@ -2433,12 +2477,21 @@ body {
       this._drawTimeAxis(L);
       this._drawCrosshair(L, yOf);
       this._drawLastPrice(L, yOf);
-      this._drawLegend(L);
+      if (this.domLegend && !this._exporting) {
+        if (this.onLegend) {
+          let i = this.hover && this.hover.index != null ? this.hover.index : this.candles.length - 1;
+          i = Math.max(0, Math.min(this.candles.length - 1, i));
+          this.onLegend(this._legendModel(i));
+        }
+      } else {
+        this._drawLegend(L);
+      }
     }
 
     _drawEmaBands(L, yOf) {
       const ctx = this.ctx;
       const { s, e } = this._visible();
+      if (this.hiddenOverlays.has('emaband')) return;
       for (const [, b] of this.emaBands) {
         ctx.save();
         ctx.beginPath();
@@ -2491,7 +2544,8 @@ body {
     _drawBands(L, yOf) {
       const ctx = this.ctx;
       const { s, e } = this._visible();
-      for (const [, b] of this.bands) {
+      for (const [id, b] of this.bands) {
+        if (this.hiddenOverlays.has(b.key || id)) continue;
         ctx.save();
         ctx.beginPath();
         ctx.rect(L.price.x, L.price.y, L.price.w, L.price.h);
@@ -2732,7 +2786,8 @@ body {
       ctx.beginPath();
       ctx.rect(L.price.x, L.price.y, L.price.w, L.price.h);
       ctx.clip();
-      for (const [, ov] of this.overlays) {
+      for (const [id, ov] of this.overlays) {
+        if (this.hiddenOverlays.has(this._ovKey(id, ov))) continue;
         ctx.strokeStyle = ov.color;
         ctx.lineWidth = ov.width || 1.6;
         ctx.setLineDash(ov.dash || []);
@@ -3414,9 +3469,12 @@ body {
         if (v == null || !isFinite(v) || v < this._scale.min || v > this._scale.max) return;
         tags.push({ y: yOf(v), v, color });
       };
-      for (const [, ov] of this.overlays) add(ov.data[i], ov.color);
+      for (const [id, ov] of this.overlays) {
+        if (this.hiddenOverlays.has(this._ovKey(id, ov))) continue;
+        add(ov.data[i], ov.color);
+      }
       for (const [, b] of this.emaBands) {
-        if (!b.legend) continue;
+        if (!b.legend || this.hiddenOverlays.has('emaband')) continue;
         add(b.fast[i], b.legend[0].color);
         add(b.slow[i], b.legend[1].color);
       }
@@ -3501,7 +3559,9 @@ body {
     toPNG() {
       const h = this.hover;
       this.hover = null;
+      this._exporting = true; // force the canvas legend into the snapshot
       this.render();
+      this._exporting = false;
       const blob = new Promise((resolve) => {
         try {
           this.canvas.toBlob((b) => resolve(b), 'image/png');
@@ -3560,6 +3620,49 @@ body {
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'left';
       ctx.fillText(dtag, dx + 6, dy + 12);
+    }
+
+    /** Toggle an indicator's visibility from the legend eye control. */
+    toggleHidden(key) {
+      if (this.hiddenOverlays.has(key)) this.hiddenOverlays.delete(key);
+      else this.hiddenOverlays.add(key);
+      this.requestRender();
+    }
+    _ovKey(id, ov) {
+      return /^fib\d+$/.test(id) ? 'fibema' : (ov && ov.key) || id;
+    }
+    /** Structured legend data shared by the canvas legend and the HTML overlay. */
+    _legendModel(i) {
+      const m = this.meta || {};
+      const c = this.candles[i];
+      if (!c) return null;
+      const prevC = i > 0 ? this.candles[i - 1].close : c.open;
+      const chg = c.close - prevC;
+      const chgPct = prevC ? (chg / prevC) * 100 : 0;
+      const rows = [];
+      const seen = new Set();
+      for (const [id, ov] of this.overlays) {
+        const fib = /^fib\d+$/.test(id);
+        const key = this._ovKey(id, ov);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        rows.push({ key, name: fib ? 'Fib EMA 8–55' : ov.label || id, color: ov.color, value: ov.data[i], hidden: this.hiddenOverlays.has(key) });
+      }
+      for (const [, b] of this.emaBands) {
+        if (!b.legend || seen.has('emaband')) continue;
+        seen.add('emaband');
+        rows.push({ key: 'emaband', name: 'EMA ' + b.legend[0].period + '/' + b.legend[1].period + ' ribbon', color: b.legend[0].color, value: b.fast[i], hidden: this.hiddenOverlays.has('emaband') });
+      }
+      for (const [id, bb] of this.bands) {
+        const key = bb.key || id;
+        if (seen.has(key) || !bb.mid) continue;
+        seen.add(key);
+        rows.push({ key, name: bb.name || 'BB 20, 2', color: bb.lineColor || '#8aa6d0', value: bb.mid[i], hidden: this.hiddenOverlays.has(key) });
+      }
+      return {
+        symbol: m.symbol || '', interval: m.interval || '', exchange: m.exchange || '', synthetic: !!m.synthetic,
+        o: c.open, h: c.high, l: c.low, c: c.close, chg, chgPct, vol: c.volume, up: c.close >= c.open, rows
+      };
     }
 
     _drawLegend(L) {
@@ -5751,6 +5854,87 @@ body {
     toast(`⬇ ${d.candles.length} rows exported to CSV`);
   }
 
+  // ---- interactive legend (TradingView-style per-indicator rows) -----------
+  const LU = '#26a17b';
+  const LD = '#e0566a';
+  let _legendEls = null;
+  const _legendRows = new Map(); // key -> { el, dot, name, val }
+  function legendNum(n) {
+    if (n == null || !isFinite(n)) return '—';
+    return Math.abs(n) >= 1000 ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : n.toFixed(2);
+  }
+  function legendVol(n) {
+    if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+    return String(n || 0);
+  }
+  function renderHtmlLegend(model) {
+    const root = $('#chartLegend');
+    if (!root || !model) return;
+    if (!_legendEls) {
+      root.innerHTML =
+        '<div class="cl-head"><span class="cl-sym"></span><span class="cl-meta"></span><span class="cl-sample"></span></div>' +
+        '<div class="cl-ohlc"></div><div class="cl-rows"></div>';
+      _legendEls = {
+        sym: root.querySelector('.cl-sym'), meta: root.querySelector('.cl-meta'),
+        sample: root.querySelector('.cl-sample'), ohlc: root.querySelector('.cl-ohlc'), rows: root.querySelector('.cl-rows')
+      };
+    }
+    const E = _legendEls;
+    E.sym.textContent = model.symbol || '';
+    E.meta.textContent = [model.interval, model.exchange].filter(Boolean).join(' · ');
+    E.sample.textContent = model.synthetic ? 'SAMPLE' : '';
+    const vc = model.up ? LU : LD;
+    const cc = model.chg >= 0 ? LU : LD;
+    E.ohlc.innerHTML =
+      `<span class="k">O</span><span style="color:${vc}">${legendNum(model.o)}</span>` +
+      `<span class="k">H</span><span style="color:${vc}">${legendNum(model.h)}</span>` +
+      `<span class="k">L</span><span style="color:${vc}">${legendNum(model.l)}</span>` +
+      `<span class="k">C</span><span style="color:${vc}">${legendNum(model.c)}</span>` +
+      `<span style="color:${cc}">${model.chg >= 0 ? '+' : ''}${legendNum(model.chg)} (${model.chg >= 0 ? '+' : ''}${model.chgPct.toFixed(2)}%)</span>` +
+      `<span class="k">Vol</span><span>${legendVol(model.vol)}</span>`;
+    const keys = model.rows.map((r) => r.key);
+    for (const [k, row] of _legendRows) {
+      if (!keys.includes(k)) {
+        row.el.remove();
+        _legendRows.delete(k);
+      }
+    }
+    for (const r of model.rows) {
+      let row = _legendRows.get(r.key);
+      if (!row) {
+        const el = el2('div', 'cl-row');
+        el.innerHTML =
+          '<span class="cl-dot"></span><span class="cl-name"></span><span class="cl-val"></span>' +
+          '<span class="cl-actions"><button class="cl-btn cl-eye" title="Hide / show" aria-label="hide">◉</button>' +
+          '<button class="cl-btn cl-del" title="Remove indicator" aria-label="remove">✕</button></span>';
+        row = { el, dot: el.querySelector('.cl-dot'), name: el.querySelector('.cl-name'), val: el.querySelector('.cl-val') };
+        el.querySelector('.cl-eye').addEventListener('click', () => chart.toggleHidden(r.key));
+        el.querySelector('.cl-del').addEventListener('click', () => removeIndicator(r.key));
+        _legendRows.set(r.key, row);
+      }
+      row.dot.style.background = r.color;
+      row.name.textContent = r.name;
+      row.val.textContent = legendNum(r.value);
+      row.el.classList.toggle('off', !!r.hidden);
+      E.rows.appendChild(row.el); // keep model order
+    }
+  }
+  function el2(tag, cls) {
+    const n = document.createElement(tag);
+    n.className = cls;
+    return n;
+  }
+  // Remove an indicator from the legend → untick its toggle and re-apply.
+  function removeIndicator(key) {
+    if (key in state.explore) state.explore[key] = false;
+    if (chart.hiddenOverlays) chart.hiddenOverlays.delete(key);
+    const cb = document.querySelector('[data-toggle="' + key + '"]');
+    if (cb) cb.checked = false;
+    applyExplore(true);
+  }
+
   // ---- live polling --------------------------------------------------------
   let refreshing = false;
   function markUpdated(data) {
@@ -6951,6 +7135,8 @@ body {
   async function boot() {
     restore();
     chart = new window.StockChart($('#chart'), { initialBars: 130 });
+    chart.domLegend = true;
+    chart.onLegend = renderHtmlLegend;
     bindUI();
     renderLessonList();
     syncTabs();
