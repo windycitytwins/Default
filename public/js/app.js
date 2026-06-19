@@ -524,7 +524,7 @@
     }
     if (ex.vwap) chart.setOverlay('vwap', { data: ta.vwap(candles), color: '#ffd166', label: 'VWAP', width: 1.6 });
     if (ex.sr) {
-      const levels = window.TA.supportResistance(state.data.candles, { lookback: 8, maxLevels: 6, minTouches: 2 });
+      const levels = window.TA.supportResistance(state.data.candles, { maxLevels: 6 });
       levels.forEach((lvl, k) => {
         chart.setZone('sr' + k, { lo: lvl.lo, hi: lvl.hi, mid: lvl.mid, role: lvl.role, touches: lvl.touches, sr: true });
       });

@@ -89,10 +89,10 @@
    * index and its role relative to the latest close.
    */
   TA.supportResistance = function (candles, opts = {}) {
-    const lookback = opts.lookback || 8;
+    const lookback = opts.lookback || 6;
     const maxLevels = opts.maxLevels || 6;
-    const tol = opts.tolerance || 0.01; // merge pivots within ~1%
-    const minTouches = opts.minTouches || 2;
+    const tol = opts.tolerance || 0.012; // merge pivots within ~1.2%
+    const minTouches = opts.minTouches || 1; // a single significant swing is still a level
     const n = candles.length;
     if (n < lookback * 2 + 2) return [];
     const { highs, lows } = TA.pivots(candles, lookback);
@@ -114,7 +114,7 @@
     }
 
     const lastClose = candles[n - 1].close;
-    const levels = clusters
+    const all = clusters
       .map((cl) => {
         const prices = cl.pts.map((p) => p.price);
         const idxs = cl.pts.map((p) => p.i);
@@ -124,22 +124,24 @@
         const touches = cl.pts.length;
         const lastTouch = Math.max.apply(null, idxs);
         const firstTouch = Math.min.apply(null, idxs);
-        const recency = lastTouch / n; // 0..1
-        const span = (lastTouch - firstTouch) / n; // held over time
+        const recency = lastTouch / n;
+        const span = (lastTouch - firstTouch) / n;
         const dist = Math.abs(mid - lastClose) / lastClose;
-        const proximity = 1 / (1 + dist * 1.6); // nearer = stronger
-        const score = touches * (1 + recency * 0.7 + span * 0.4) * proximity;
+        const proximity = 1 / (1 + dist * 3); // strongly favour levels near price
+        const score = (touches + recency * 1.5 + span) * proximity;
         return {
           lo, hi, mid, touches, firstIndex: firstTouch, lastIndex: lastTouch,
           role: mid < lastClose ? 'support' : 'resistance', score
         };
       })
-      .filter((l) => l.touches >= minTouches)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, maxLevels)
-      .sort((a, b) => b.mid - a.mid);
+      .filter((l) => l.touches >= minTouches);
 
-    return levels;
+    // Balanced set: the nearest/strongest resistances above + supports below the
+    // current price, so something relevant always shows on both sides.
+    const half = Math.ceil(maxLevels / 2);
+    const res = all.filter((l) => l.role === 'resistance').sort((a, b) => b.score - a.score).slice(0, half);
+    const sup = all.filter((l) => l.role === 'support').sort((a, b) => b.score - a.score).slice(0, half);
+    return res.concat(sup).sort((a, b) => b.mid - a.mid);
   };
 
   /** Classify the prevailing trend from a moving average's slope. */

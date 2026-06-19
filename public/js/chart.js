@@ -492,6 +492,17 @@
         if (this.livePrice < min) min = this.livePrice;
         if (this.livePrice > max) max = this.livePrice;
       }
+      // expand to fit support/resistance zones that sit just outside the candle
+      // window (proximity-selected, so they stay near price), capped so a level
+      // can't blow out the scale by more than ~12% beyond the candle range.
+      if (isFinite(min) && isFinite(max)) {
+        const cap = (max - min) * 0.12 || max * 0.05;
+        for (const z of this.zones.values()) {
+          if (!z.sr) continue;
+          if (z.lo >= min - cap) min = Math.min(min, z.lo);
+          if (z.hi <= max + cap) max = Math.max(max, z.hi);
+        }
+      }
       if (!isFinite(min) || !isFinite(max)) {
         min = 0;
         max = 1;
