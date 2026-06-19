@@ -262,6 +262,18 @@ body {
 .dr-btn.active { background: rgba(91, 140, 255, 0.18); color: var(--accent); border-color: rgba(91, 140, 255, 0.5); }
 .dr-toggle.on { background: rgba(255, 209, 102, 0.18); color: #ffd166; border-color: rgba(255, 209, 102, 0.5); }
 .dr-sep { width: 22px; height: 1px; background: var(--border); margin: 5px 0; }
+.dr-color {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+}
+.dr-color.active { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px #fff; }
+.dr-color-custom { overflow: hidden; background: conic-gradient(from 0deg, #e0566a, #ffd166, #26a17b, #5b8cff, #b083ff, #e0566a); }
+.dr-color-custom input { position: absolute; inset: -4px; width: 28px; height: 28px; border: none; padding: 0; background: transparent; cursor: pointer; opacity: 0; }
 /* timeframe ribbon (TradingView-style interval buttons) */
 .tf-ribbon {
   display: flex;

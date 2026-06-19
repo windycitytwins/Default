@@ -84,6 +84,7 @@
       this.draft = null; // in-progress drawing
       this.selected = null; // id of the selected drawing
       this._drawSeq = 0;
+      this.drawColor = '#5b8cff'; // active colour for new drawings
 
       this.visStart = 0;
       this.visCount = 120;
@@ -244,6 +245,20 @@
     }
     setMagnet(on) {
       this.magnet = !!on;
+    }
+    setDrawColor(c) {
+      this.drawColor = c || '#5b8cff';
+    }
+    /** Recolour the currently-selected drawing (used by the colour picker). */
+    recolorSelected(c) {
+      if (this.selected == null) return false;
+      const d = this.drawings.find((x) => x.id === this.selected);
+      if (!d) return false;
+      d.color = c;
+      if (d.fill) d.fill = this._rgba(c, 0.12);
+      this._emit('drawingschange', this.drawings);
+      this.requestRender();
+      return true;
     }
     getDrawings() {
       return this.drawings;
@@ -540,6 +555,7 @@
       this._drawAnnotations(L, yOf);
       this._drawDrawings(L, yOf);
       this._drawPriceAxis(L, scale, yOf);
+      this._drawAxisTags(L, yOf);
       this._drawTimeAxis(L);
       this._drawCrosshair(L, yOf);
       this._drawLastPrice(L, yOf);
@@ -1282,11 +1298,11 @@
           const x1 = Math.max(X(d.a.t), X(d.b.t));
           const y0 = Math.min(Y(d.a.price), Y(d.b.price));
           const y1 = Math.max(Y(d.a.price), Y(d.b.price));
-          ctx.fillStyle = d.fill || this._rgba(col, 0.13);
+          ctx.fillStyle = d.fill || this._rgba(col, 0.1);
           ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
           ctx.strokeStyle = col;
           ctx.lineWidth = lw;
-          ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+          ctx.strokeRect(Math.round(x0) + 0.5, Math.round(y0) + 0.5, Math.round(x1 - x0), Math.round(y1 - y0));
           ctx.restore();
           if (sel) {
             this._handle(X(d.a.t), Y(d.a.price));
@@ -1314,10 +1330,11 @@
             ctx.moveTo(x0, Math.round(y) + 0.5);
             ctx.lineTo(rightX, Math.round(y) + 0.5);
             ctx.stroke();
+            // TradingView-style label: "0.236 (59.94)" pinned at the left.
             ctx.fillStyle = mid ? '#ffd98a' : this.theme.text;
             ctx.font = '10px system-ui, sans-serif';
             ctx.textAlign = 'left';
-            ctx.fillText(`${(r * 100).toFixed(1).replace(/\.0$/, '')}%  ${fmtPrice(price)}`, x0 + 4, y - 2);
+            ctx.fillText(`${r} (${fmtPrice(price)})`, x0 + 5, y - 3);
           });
           ctx.restore();
           if (sel) {
@@ -1456,6 +1473,49 @@
         const y = yOf(t);
         if (y < L.price.y - 4 || y > L.price.y + L.price.h + 4) continue;
         ctx.fillText(fmtPrice(t), L.price.x + L.price.w + 6, y + 4);
+      }
+    }
+
+    /** Colored value pills on the right axis for every MA/EMA line (TradingView
+     *  style), with vertical collision-avoidance so overlapping ones stack. */
+    _drawAxisTags(L, yOf) {
+      const ctx = this.ctx;
+      const { s, e } = this._visible();
+      if (e <= s) return;
+      const i = e - 1; // value at the rightmost visible bar
+      const tags = [];
+      const add = (v, color) => {
+        if (v == null || !isFinite(v) || v < this._scale.min || v > this._scale.max) return;
+        tags.push({ y: yOf(v), v, color });
+      };
+      for (const [, ov] of this.overlays) add(ov.data[i], ov.color);
+      for (const [, b] of this.emaBands) {
+        if (!b.legend) continue;
+        add(b.fast[i], b.legend[0].color);
+        add(b.slow[i], b.legend[1].color);
+      }
+      if (!tags.length) return;
+      // de-overlap: sort by y, push down to keep a minimum gap, then lift the
+      // whole stack back up if it spilled past the bottom of the price area.
+      tags.sort((a, b) => a.y - b.y);
+      const H = 14;
+      const top = L.price.y + 7;
+      const bot = L.price.y + L.price.h - 7;
+      tags[0].y = Math.max(top, tags[0].y);
+      for (let k = 1; k < tags.length; k++) tags[k].y = Math.max(tags[k].y, tags[k - 1].y + H);
+      const spill = tags[tags.length - 1].y - bot;
+      if (spill > 0) for (const t of tags) t.y -= spill;
+      const x = L.price.x + L.price.w + 1;
+      const maxW = this._pad.right - 2;
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      for (const t of tags) {
+        const txt = fmtPrice(t.v);
+        const tw = Math.min(ctx.measureText(txt).width + 8, maxW);
+        ctx.fillStyle = t.color;
+        ctx.fillRect(x, t.y - 7, tw, 14);
+        ctx.fillStyle = '#0e1320';
+        ctx.fillText(txt, x + 4, t.y + 3);
       }
     }
 
@@ -1739,12 +1799,11 @@
           const an = this._anchorAt(px, py);
           const id = ++this._drawSeq;
           if (this.tool === 'text') {
-            this.draft = { id, type: 'text', a: an, color: '#e8edf6' };
+            this.draft = { id, type: 'text', a: an, color: this.drawColor };
           } else if (this.tool === 'hline' || this.tool === 'hray') {
-            this.draft = { id, type: this.tool, a: an, color: '#5b8cff' };
+            this.draft = { id, type: this.tool, a: an, color: this.drawColor };
           } else {
-            const color =
-              this.tool === 'arrow' ? '#ffd166' : this.tool === 'measure' ? '#9aa6bf' : '#5b8cff';
+            const color = this.tool === 'measure' ? '#9aa6bf' : this.drawColor;
             this.draft = { id, type: this.tool, a: an, b: { t: an.t, price: an.price }, color };
           }
           this._drawing = true;

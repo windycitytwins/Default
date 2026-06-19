@@ -1359,6 +1359,19 @@
         setActive(btn);
       });
     });
+    // colour palette — sets the colour for new drawings, and recolours the
+    // selected one (so a red box = resistance, a green box = support).
+    const colorBtns = rail.querySelectorAll('.dr-color[data-color]');
+    const colorInput = $('#drawColorInput');
+    const setColor = (c, fromInput) => {
+      chart.setDrawColor(c);
+      chart.recolorSelected(c);
+      colorBtns.forEach((b) => b.classList.toggle('active', b.dataset.color === c));
+      if (colorInput && !fromInput) colorInput.value = c;
+    };
+    colorBtns.forEach((b) => b.addEventListener('click', () => setColor(b.dataset.color)));
+    if (colorInput) colorInput.addEventListener('input', () => setColor(colorInput.value, true));
+
     const magnetBtn = rail.querySelector('[data-action="magnet"]');
     magnetBtn.addEventListener('click', () => {
       const on = !magnetBtn.classList.contains('on');
