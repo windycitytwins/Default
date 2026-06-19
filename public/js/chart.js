@@ -62,7 +62,7 @@
 
       this.candles = [];
       this.mode = 'candles'; // 'candles' | 'line'
-      this.flags = { volume: true, rsi: false, macd: false };
+      this.flags = { volume: true, rsi: false, macd: false, volProfile: false };
       this.logScale = false;
 
       this.overlays = new Map(); // id -> {data:[null|num], color, width, label, dash}
@@ -416,6 +416,7 @@
       else this._drawLine(L, yOf);
       this._drawOverlays(L, yOf);
       this._drawPolylines(L, yOf);
+      if (this.flags.volProfile) this._drawVolumeProfile(L, yOf, scale);
       this._drawHLines(L, yOf);
       if (this.flags.volume && L.vol) this._drawVolume(L.vol);
       if (this.flags.rsi && L.rsi) this._drawRSI(L.rsi);
@@ -728,6 +729,60 @@
         ctx.setLineDash([]);
         ctx.restore();
       }
+    }
+
+    /** Volume Profile (visible range): volume-by-price histogram on the right,
+     *  with the Point of Control (highest-volume price) highlighted. */
+    _drawVolumeProfile(L, yOf, scale) {
+      const ctx = this.ctx;
+      const { s, e } = this._visible();
+      const rows = 32;
+      const lo = scale.min;
+      const span = scale.max - scale.min || 1;
+      const bins = new Array(rows).fill(0);
+      for (let i = s; i < e; i++) {
+        const c = this.candles[i];
+        const b0 = Math.max(0, Math.min(rows - 1, Math.floor(((c.low - lo) / span) * rows)));
+        const b1 = Math.max(0, Math.min(rows - 1, Math.floor(((c.high - lo) / span) * rows)));
+        const n = b1 - b0 + 1;
+        const v = (c.volume || 0) / n;
+        for (let b = b0; b <= b1; b++) bins[b] += v;
+      }
+      let maxV = 0;
+      let pocBin = 0;
+      bins.forEach((v, b) => {
+        if (v > maxV) {
+          maxV = v;
+          pocBin = b;
+        }
+      });
+      if (maxV <= 0) return;
+      const profW = L.price.w * 0.3;
+      const xRight = L.price.x + L.price.w;
+      const rowH = L.price.h / rows;
+      ctx.save();
+      for (let b = 0; b < rows; b++) {
+        const w = (bins[b] / maxV) * profW;
+        if (w < 0.5) continue;
+        const y = L.price.y + L.price.h - (b + 1) * rowH;
+        ctx.fillStyle = b === pocBin ? 'rgba(255,184,80,0.45)' : 'rgba(90,140,255,0.26)';
+        ctx.fillRect(xRight - w, y + 0.5, w, rowH - 1);
+      }
+      // Point of Control line
+      const pocY = L.price.y + L.price.h - (pocBin + 0.5) * rowH;
+      ctx.strokeStyle = 'rgba(255,184,80,0.7)';
+      ctx.setLineDash([5, 4]);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(L.price.x, pocY);
+      ctx.lineTo(xRight, pocY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255,184,80,0.95)';
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('POC', L.price.x + 4, pocY - 3);
+      ctx.restore();
     }
 
     _drawHLines(L, yOf) {

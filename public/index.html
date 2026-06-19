@@ -33,15 +33,6 @@
         <button class="chip" data-sym="SPY">SPY</button>
         <button class="chip" data-sym="BTC-USD">BTC</button>
       </div>
-      <select id="rangeSelect" aria-label="Timeframe">
-        <option value="1d">1D · 2-min</option>
-        <option value="5d">5D · 15-min</option>
-        <option value="1mo">1M · 30-min</option>
-        <option value="6mo">6M · daily</option>
-        <option value="1y" selected>1Y · daily</option>
-        <option value="5y">5Y · weekly</option>
-        <option value="max">Max · monthly</option>
-      </select>
     </div>
 
     <div class="quote">
@@ -56,6 +47,17 @@
 
   <main class="layout">
     <section class="chart-pane">
+      <div class="tf-ribbon" id="tfRibbon" role="tablist" aria-label="Chart timeframe">
+        <button class="tf-btn" data-range="1d" title="1 day · 2-minute bars">1D</button>
+        <button class="tf-btn" data-range="5d" title="5 days · 15-minute bars">5D</button>
+        <button class="tf-btn" data-range="1mo" title="1 month · 30-minute bars">1M</button>
+        <button class="tf-btn" data-range="6mo" title="6 months · daily bars">6M</button>
+        <button class="tf-btn active" data-range="1y" title="1 year · daily bars">1Y</button>
+        <button class="tf-btn" data-range="5y" title="5 years · weekly bars">5Y</button>
+        <button class="tf-btn" data-range="max" title="Max · monthly bars">All</button>
+        <span class="tf-spacer"></span>
+        <button class="tf-meta" id="csvExportBtn" title="Download the visible candles as a CSV file">⤓ CSV</button>
+      </div>
       <div id="sampleBanner" class="sample-banner" style="display:none">
         ⚠ Showing <b>SAMPLE data — NOT live or real</b>. Start the local server
         (<code>node server.js</code>) and open <b>http://localhost:8123</b> for real prices.
@@ -142,6 +144,7 @@
           <label class="switch"><input type="checkbox" data-toggle="ma50" checked /><span><i class="dot" style="background:#5b8cff"></i>SMA 50</span></label>
           <label class="switch"><input type="checkbox" data-toggle="ma100" checked /><span><i class="dot" style="background:#ffb020"></i>SMA 100</span></label>
           <label class="switch"><input type="checkbox" data-toggle="ma200" checked /><span><i class="dot" style="background:#e0566a"></i>SMA 200</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="fibema" /><span><i class="dot" style="background:linear-gradient(90deg,#2ee6a0,#46c9ff,#b083ff,#e0566a)"></i>Fibonacci EMA ribbon (8·13·21·34·55)</span></label>
         </div>
 
         <div class="control-group">
@@ -150,11 +153,13 @@
           <label class="switch"><input type="checkbox" data-toggle="vwap" /><span><i class="dot" style="background:#ffd166"></i>VWAP (intraday)</span></label>
           <label class="switch"><input type="checkbox" data-toggle="rsi" /><span>RSI (14)</span></label>
           <label class="switch"><input type="checkbox" data-toggle="macd" /><span>MACD (12, 26, 9)</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="fib" /><span><i class="dot" style="background:rgba(255,200,90,0.85)"></i>Fibonacci retracement (auto swing)</span></label>
         </div>
 
         <div class="control-group">
           <h3>Panels & levels</h3>
           <label class="switch"><input type="checkbox" data-toggle="volume" checked /><span>Volume</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="volprofile" /><span><i class="dot" style="background:rgba(90,140,255,0.85)"></i>Volume Profile (visible range)</span></label>
           <label class="switch"><input type="checkbox" data-toggle="sr" /><span>Auto support/resistance zones</span></label>
           <label class="switch"><input type="checkbox" data-toggle="ew" /><span>🌊 Elliott Wave auto-count (beta)</span></label>
           <div id="ewControls" class="ew-controls" style="display:none">

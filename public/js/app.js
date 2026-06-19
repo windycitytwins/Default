@@ -24,7 +24,7 @@
     lessonIdx: 0,
     stepIdx: 0,
     view: 'lessons',
-    explore: { mode: 'candles', emaband: true, ema9: false, ema21: false, ema50: true, ma20: true, ma50: true, ma100: true, ma200: true, bb: false, vwap: false, volume: true, rsi: false, macd: false, sr: false, log: false, ew: false, ewPct: null }
+    explore: { mode: 'candles', emaband: true, ema9: false, ema21: false, ema50: true, ma20: true, ma50: true, ma100: true, ma200: true, fibema: false, bb: false, vwap: false, volprofile: false, volume: true, rsi: false, macd: false, sr: false, fib: false, log: false, ew: false, ewPct: null }
   };
 
   let chart;
@@ -192,6 +192,31 @@
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     toast('⬇ Chart image downloaded');
+  }
+
+  // Export the loaded candles (OHLCV) as a CSV file — handy for spreadsheets.
+  function exportCsv() {
+    const d = state.data;
+    if (!d || !d.candles || !d.candles.length) {
+      toast('No data to export yet');
+      return;
+    }
+    const rows = ['Date,Open,High,Low,Close,Volume'];
+    for (const c of d.candles) {
+      const dt = new Date(c.time || c.t || 0);
+      const stamp = isFinite(dt.getTime()) ? dt.toISOString().slice(0, /(m|h)$/.test(d.interval || '') ? 16 : 10).replace('T', ' ') : '';
+      rows.push([stamp, c.open, c.high, c.low, c.close, c.volume || 0].join(','));
+    }
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${d.symbol || state.symbol}_${state.range}_${state.interval}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast(`⬇ ${d.candles.length} rows exported to CSV`);
   }
 
   // ---- live polling --------------------------------------------------------
@@ -438,6 +463,7 @@
     chart.toggle('volume', ex.volume);
     chart.toggle('rsi', ex.rsi);
     chart.toggle('macd', ex.macd);
+    chart.toggle('volProfile', ex.volprofile);
     chart.setLogScale(ex.log);
     if (!keepView) chart.resetView();
     const candles = state.data.candles;
@@ -457,6 +483,12 @@
     if (ex.ma50) chart.setOverlay('ma50', { data: ta.sma(closes, 50), color: '#5b8cff', label: 'SMA 50', group: 'SMA', period: 50 });
     if (ex.ma100 && closes.length > 100) chart.setOverlay('ma100', { data: ta.sma(closes, 100), color: '#ffb020', label: 'SMA 100', group: 'SMA', period: 100 });
     if (ex.ma200 && closes.length > 200) chart.setOverlay('ma200', { data: ta.sma(closes, 200), color: '#e0566a', label: 'SMA 200', group: 'SMA', period: 200 });
+    // Fibonacci EMA ribbon (8/13/21/34/55) — a multi-length trend gauge: price
+    // riding above a fanned-out, evenly-spaced ribbon = strong trend; tangled = chop.
+    if (ex.fibema)
+      [[8, '#2ee6a0'], [13, '#46c9ff'], [21, '#6aa9ff'], [34, '#b083ff'], [55, '#e0566a']].forEach(([p, col]) => {
+        if (closes.length > p) chart.setOverlay('fib' + p, { data: ta.ema(closes, p), color: col, width: 1.3, label: 'EMA ' + p, group: 'Fib EMA', period: p });
+      });
     if (ex.bb) {
       const b = ta.bollinger(closes, 20, 2);
       chart.setBand('bb', { upper: b.upper, lower: b.lower, mid: b.mid, color: 'rgba(120,160,255,0.07)', lineColor: 'rgba(150,180,255,0.6)' });
@@ -473,6 +505,31 @@
           labelColor: isSup ? 'rgba(120,230,190,.95)' : 'rgba(255,160,170,.95)'
         });
       });
+    }
+    // Auto Fibonacci retracement on the dominant swing (largest ZigZag leg).
+    if (ex.fib) {
+      const piv = ta.zigzag(candles, candles.length > 220 ? 0.08 : 0.06);
+      if (piv.length >= 2) {
+        let bi = 1, bAmp = 0;
+        for (let i = 1; i < piv.length; i++) {
+          const amp = Math.abs(piv[i].price - piv[i - 1].price);
+          if (amp > bAmp) { bAmp = amp; bi = i; }
+        }
+        const a = piv[bi - 1].price, b = piv[bi].price;
+        const up = b > a;
+        const hi = Math.max(a, b), lo = Math.min(a, b), rng = hi - lo || 1;
+        // 0% sits at the swing's end, 100% at its start (TradingView orientation).
+        [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1].forEach((r) => {
+          const price = up ? hi - r * rng : lo + r * rng;
+          const mid = r > 0 && r < 1;
+          chart.setHLine('fibr' + String(r).replace('.', ''), {
+            price,
+            color: mid ? 'rgba(255,200,90,0.55)' : 'rgba(180,200,255,0.6)',
+            label: (r * 100).toFixed(1).replace(/\.0$/, '') + '%',
+            dash: [4, 4]
+          });
+        });
+      }
     }
     const ewControls = $('#ewControls');
     if (ewControls) ewControls.style.display = ex.ew ? 'block' : 'none';
@@ -1079,16 +1136,21 @@
     document.querySelectorAll('.chip[data-sym]').forEach((c) =>
       c.addEventListener('click', () => loadSymbol(c.dataset.sym))
     );
-    $('#rangeSelect').addEventListener('change', async (e) => {
-      const v = e.target.value;
-      const map = {
-        '1d': ['1d', '2m'], '5d': ['5d', '15m'], '1mo': ['1mo', '30m'],
-        '6mo': ['6mo', '1d'], '1y': ['1y', '1d'], '5y': ['5y', '1wk'], 'max': ['max', '1mo']
-      };
-      [state.range, state.interval] = map[v] || ['1y', '1d'];
-      await loadSymbol(state.symbol);
-      chart.showAll(); // fit the full selected range so the change is visible
+    // Timeframe ribbon (TradingView-style interval buttons)
+    const TF_MAP = {
+      '1d': ['1d', '2m'], '5d': ['5d', '15m'], '1mo': ['1mo', '30m'],
+      '6mo': ['6mo', '1d'], '1y': ['1y', '1d'], '5y': ['5y', '1wk'], 'max': ['max', '1mo']
+    };
+    document.querySelectorAll('.tf-btn[data-range]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const v = btn.dataset.range;
+        document.querySelectorAll('.tf-btn').forEach((b) => b.classList.toggle('active', b === btn));
+        [state.range, state.interval] = TF_MAP[v] || ['1y', '1d'];
+        await loadSymbol(state.symbol);
+        chart.showAll(); // fit the full selected range so the change is visible
+      });
     });
+    $('#csvExportBtn').addEventListener('click', exportCsv);
 
     $('#tabLessons').addEventListener('click', () => {
       state.view = 'lessons';

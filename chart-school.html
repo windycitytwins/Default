@@ -97,16 +97,6 @@ body {
 }
 .chip:hover { color: var(--text); border-color: var(--accent); background: #1b2440; }
 
-#rangeSelect {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 9px 10px;
-  border-radius: 9px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
 .quote { margin-left: auto; text-align: right; }
 .quote-main { display: flex; align-items: baseline; gap: 10px; justify-content: flex-end; }
 .q-symbol { font-weight: 700; font-size: 15px; color: var(--muted); }
@@ -129,6 +119,43 @@ body {
   min-width: 0;
   border-right: 1px solid var(--border);
 }
+/* timeframe ribbon (TradingView-style interval buttons) */
+.tf-ribbon {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(13, 18, 33, 0.5);
+}
+.tf-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.tf-btn:hover { background: rgba(120, 150, 230, 0.12); color: var(--text); }
+.tf-btn.active { background: var(--accent); color: #0a1020; border-color: var(--accent); }
+.tf-spacer { flex: 1; }
+.tf-meta {
+  background: rgba(22, 29, 48, 0.7);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.tf-meta:hover { color: var(--text); border-color: var(--accent); }
+
 .chart-host {
   flex: 1;
   min-height: 0;
@@ -643,15 +670,6 @@ body {
         <button class="chip" data-sym="SPY">SPY</button>
         <button class="chip" data-sym="BTC-USD">BTC</button>
       </div>
-      <select id="rangeSelect" aria-label="Timeframe">
-        <option value="1d">1D · 2-min</option>
-        <option value="5d">5D · 15-min</option>
-        <option value="1mo">1M · 30-min</option>
-        <option value="6mo">6M · daily</option>
-        <option value="1y" selected>1Y · daily</option>
-        <option value="5y">5Y · weekly</option>
-        <option value="max">Max · monthly</option>
-      </select>
     </div>
 
     <div class="quote">
@@ -666,6 +684,17 @@ body {
 
   <main class="layout">
     <section class="chart-pane">
+      <div class="tf-ribbon" id="tfRibbon" role="tablist" aria-label="Chart timeframe">
+        <button class="tf-btn" data-range="1d" title="1 day · 2-minute bars">1D</button>
+        <button class="tf-btn" data-range="5d" title="5 days · 15-minute bars">5D</button>
+        <button class="tf-btn" data-range="1mo" title="1 month · 30-minute bars">1M</button>
+        <button class="tf-btn" data-range="6mo" title="6 months · daily bars">6M</button>
+        <button class="tf-btn active" data-range="1y" title="1 year · daily bars">1Y</button>
+        <button class="tf-btn" data-range="5y" title="5 years · weekly bars">5Y</button>
+        <button class="tf-btn" data-range="max" title="Max · monthly bars">All</button>
+        <span class="tf-spacer"></span>
+        <button class="tf-meta" id="csvExportBtn" title="Download the visible candles as a CSV file">⤓ CSV</button>
+      </div>
       <div id="sampleBanner" class="sample-banner" style="display:none">
         ⚠ Showing <b>SAMPLE data — NOT live or real</b>. Start the local server
         (<code>node server.js</code>) and open <b>http://localhost:8123</b> for real prices.
@@ -752,6 +781,7 @@ body {
           <label class="switch"><input type="checkbox" data-toggle="ma50" checked /><span><i class="dot" style="background:#5b8cff"></i>SMA 50</span></label>
           <label class="switch"><input type="checkbox" data-toggle="ma100" checked /><span><i class="dot" style="background:#ffb020"></i>SMA 100</span></label>
           <label class="switch"><input type="checkbox" data-toggle="ma200" checked /><span><i class="dot" style="background:#e0566a"></i>SMA 200</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="fibema" /><span><i class="dot" style="background:linear-gradient(90deg,#2ee6a0,#46c9ff,#b083ff,#e0566a)"></i>Fibonacci EMA ribbon (8·13·21·34·55)</span></label>
         </div>
 
         <div class="control-group">
@@ -760,11 +790,13 @@ body {
           <label class="switch"><input type="checkbox" data-toggle="vwap" /><span><i class="dot" style="background:#ffd166"></i>VWAP (intraday)</span></label>
           <label class="switch"><input type="checkbox" data-toggle="rsi" /><span>RSI (14)</span></label>
           <label class="switch"><input type="checkbox" data-toggle="macd" /><span>MACD (12, 26, 9)</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="fib" /><span><i class="dot" style="background:rgba(255,200,90,0.85)"></i>Fibonacci retracement (auto swing)</span></label>
         </div>
 
         <div class="control-group">
           <h3>Panels & levels</h3>
           <label class="switch"><input type="checkbox" data-toggle="volume" checked /><span>Volume</span></label>
+          <label class="switch"><input type="checkbox" data-toggle="volprofile" /><span><i class="dot" style="background:rgba(90,140,255,0.85)"></i>Volume Profile (visible range)</span></label>
           <label class="switch"><input type="checkbox" data-toggle="sr" /><span>Auto support/resistance zones</span></label>
           <label class="switch"><input type="checkbox" data-toggle="ew" /><span>🌊 Elliott Wave auto-count (beta)</span></label>
           <div id="ewControls" class="ew-controls" style="display:none">
@@ -1569,7 +1601,7 @@ body {
 
       this.candles = [];
       this.mode = 'candles'; // 'candles' | 'line'
-      this.flags = { volume: true, rsi: false, macd: false };
+      this.flags = { volume: true, rsi: false, macd: false, volProfile: false };
       this.logScale = false;
 
       this.overlays = new Map(); // id -> {data:[null|num], color, width, label, dash}
@@ -1923,6 +1955,7 @@ body {
       else this._drawLine(L, yOf);
       this._drawOverlays(L, yOf);
       this._drawPolylines(L, yOf);
+      if (this.flags.volProfile) this._drawVolumeProfile(L, yOf, scale);
       this._drawHLines(L, yOf);
       if (this.flags.volume && L.vol) this._drawVolume(L.vol);
       if (this.flags.rsi && L.rsi) this._drawRSI(L.rsi);
@@ -2235,6 +2268,60 @@ body {
         ctx.setLineDash([]);
         ctx.restore();
       }
+    }
+
+    /** Volume Profile (visible range): volume-by-price histogram on the right,
+     *  with the Point of Control (highest-volume price) highlighted. */
+    _drawVolumeProfile(L, yOf, scale) {
+      const ctx = this.ctx;
+      const { s, e } = this._visible();
+      const rows = 32;
+      const lo = scale.min;
+      const span = scale.max - scale.min || 1;
+      const bins = new Array(rows).fill(0);
+      for (let i = s; i < e; i++) {
+        const c = this.candles[i];
+        const b0 = Math.max(0, Math.min(rows - 1, Math.floor(((c.low - lo) / span) * rows)));
+        const b1 = Math.max(0, Math.min(rows - 1, Math.floor(((c.high - lo) / span) * rows)));
+        const n = b1 - b0 + 1;
+        const v = (c.volume || 0) / n;
+        for (let b = b0; b <= b1; b++) bins[b] += v;
+      }
+      let maxV = 0;
+      let pocBin = 0;
+      bins.forEach((v, b) => {
+        if (v > maxV) {
+          maxV = v;
+          pocBin = b;
+        }
+      });
+      if (maxV <= 0) return;
+      const profW = L.price.w * 0.3;
+      const xRight = L.price.x + L.price.w;
+      const rowH = L.price.h / rows;
+      ctx.save();
+      for (let b = 0; b < rows; b++) {
+        const w = (bins[b] / maxV) * profW;
+        if (w < 0.5) continue;
+        const y = L.price.y + L.price.h - (b + 1) * rowH;
+        ctx.fillStyle = b === pocBin ? 'rgba(255,184,80,0.45)' : 'rgba(90,140,255,0.26)';
+        ctx.fillRect(xRight - w, y + 0.5, w, rowH - 1);
+      }
+      // Point of Control line
+      const pocY = L.price.y + L.price.h - (pocBin + 0.5) * rowH;
+      ctx.strokeStyle = 'rgba(255,184,80,0.7)';
+      ctx.setLineDash([5, 4]);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(L.price.x, pocY);
+      ctx.lineTo(xRight, pocY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255,184,80,0.95)';
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('POC', L.price.x + 4, pocY - 3);
+      ctx.restore();
     }
 
     _drawHLines(L, yOf) {
@@ -4466,7 +4553,7 @@ body {
     lessonIdx: 0,
     stepIdx: 0,
     view: 'lessons',
-    explore: { mode: 'candles', emaband: true, ema9: false, ema21: false, ema50: true, ma20: true, ma50: true, ma100: true, ma200: true, bb: false, vwap: false, volume: true, rsi: false, macd: false, sr: false, log: false, ew: false, ewPct: null }
+    explore: { mode: 'candles', emaband: true, ema9: false, ema21: false, ema50: true, ma20: true, ma50: true, ma100: true, ma200: true, fibema: false, bb: false, vwap: false, volprofile: false, volume: true, rsi: false, macd: false, sr: false, fib: false, log: false, ew: false, ewPct: null }
   };
 
   let chart;
@@ -4634,6 +4721,31 @@ body {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     toast('⬇ Chart image downloaded');
+  }
+
+  // Export the loaded candles (OHLCV) as a CSV file — handy for spreadsheets.
+  function exportCsv() {
+    const d = state.data;
+    if (!d || !d.candles || !d.candles.length) {
+      toast('No data to export yet');
+      return;
+    }
+    const rows = ['Date,Open,High,Low,Close,Volume'];
+    for (const c of d.candles) {
+      const dt = new Date(c.time || c.t || 0);
+      const stamp = isFinite(dt.getTime()) ? dt.toISOString().slice(0, /(m|h)$/.test(d.interval || '') ? 16 : 10).replace('T', ' ') : '';
+      rows.push([stamp, c.open, c.high, c.low, c.close, c.volume || 0].join(','));
+    }
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${d.symbol || state.symbol}_${state.range}_${state.interval}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast(`⬇ ${d.candles.length} rows exported to CSV`);
   }
 
   // ---- live polling --------------------------------------------------------
@@ -4880,6 +4992,7 @@ body {
     chart.toggle('volume', ex.volume);
     chart.toggle('rsi', ex.rsi);
     chart.toggle('macd', ex.macd);
+    chart.toggle('volProfile', ex.volprofile);
     chart.setLogScale(ex.log);
     if (!keepView) chart.resetView();
     const candles = state.data.candles;
@@ -4899,6 +5012,12 @@ body {
     if (ex.ma50) chart.setOverlay('ma50', { data: ta.sma(closes, 50), color: '#5b8cff', label: 'SMA 50', group: 'SMA', period: 50 });
     if (ex.ma100 && closes.length > 100) chart.setOverlay('ma100', { data: ta.sma(closes, 100), color: '#ffb020', label: 'SMA 100', group: 'SMA', period: 100 });
     if (ex.ma200 && closes.length > 200) chart.setOverlay('ma200', { data: ta.sma(closes, 200), color: '#e0566a', label: 'SMA 200', group: 'SMA', period: 200 });
+    // Fibonacci EMA ribbon (8/13/21/34/55) — a multi-length trend gauge: price
+    // riding above a fanned-out, evenly-spaced ribbon = strong trend; tangled = chop.
+    if (ex.fibema)
+      [[8, '#2ee6a0'], [13, '#46c9ff'], [21, '#6aa9ff'], [34, '#b083ff'], [55, '#e0566a']].forEach(([p, col]) => {
+        if (closes.length > p) chart.setOverlay('fib' + p, { data: ta.ema(closes, p), color: col, width: 1.3, label: 'EMA ' + p, group: 'Fib EMA', period: p });
+      });
     if (ex.bb) {
       const b = ta.bollinger(closes, 20, 2);
       chart.setBand('bb', { upper: b.upper, lower: b.lower, mid: b.mid, color: 'rgba(120,160,255,0.07)', lineColor: 'rgba(150,180,255,0.6)' });
@@ -4915,6 +5034,31 @@ body {
           labelColor: isSup ? 'rgba(120,230,190,.95)' : 'rgba(255,160,170,.95)'
         });
       });
+    }
+    // Auto Fibonacci retracement on the dominant swing (largest ZigZag leg).
+    if (ex.fib) {
+      const piv = ta.zigzag(candles, candles.length > 220 ? 0.08 : 0.06);
+      if (piv.length >= 2) {
+        let bi = 1, bAmp = 0;
+        for (let i = 1; i < piv.length; i++) {
+          const amp = Math.abs(piv[i].price - piv[i - 1].price);
+          if (amp > bAmp) { bAmp = amp; bi = i; }
+        }
+        const a = piv[bi - 1].price, b = piv[bi].price;
+        const up = b > a;
+        const hi = Math.max(a, b), lo = Math.min(a, b), rng = hi - lo || 1;
+        // 0% sits at the swing's end, 100% at its start (TradingView orientation).
+        [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1].forEach((r) => {
+          const price = up ? hi - r * rng : lo + r * rng;
+          const mid = r > 0 && r < 1;
+          chart.setHLine('fibr' + String(r).replace('.', ''), {
+            price,
+            color: mid ? 'rgba(255,200,90,0.55)' : 'rgba(180,200,255,0.6)',
+            label: (r * 100).toFixed(1).replace(/\.0$/, '') + '%',
+            dash: [4, 4]
+          });
+        });
+      }
     }
     const ewControls = $('#ewControls');
     if (ewControls) ewControls.style.display = ex.ew ? 'block' : 'none';
@@ -5521,16 +5665,21 @@ body {
     document.querySelectorAll('.chip[data-sym]').forEach((c) =>
       c.addEventListener('click', () => loadSymbol(c.dataset.sym))
     );
-    $('#rangeSelect').addEventListener('change', async (e) => {
-      const v = e.target.value;
-      const map = {
-        '1d': ['1d', '2m'], '5d': ['5d', '15m'], '1mo': ['1mo', '30m'],
-        '6mo': ['6mo', '1d'], '1y': ['1y', '1d'], '5y': ['5y', '1wk'], 'max': ['max', '1mo']
-      };
-      [state.range, state.interval] = map[v] || ['1y', '1d'];
-      await loadSymbol(state.symbol);
-      chart.showAll(); // fit the full selected range so the change is visible
+    // Timeframe ribbon (TradingView-style interval buttons)
+    const TF_MAP = {
+      '1d': ['1d', '2m'], '5d': ['5d', '15m'], '1mo': ['1mo', '30m'],
+      '6mo': ['6mo', '1d'], '1y': ['1y', '1d'], '5y': ['5y', '1wk'], 'max': ['max', '1mo']
+    };
+    document.querySelectorAll('.tf-btn[data-range]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const v = btn.dataset.range;
+        document.querySelectorAll('.tf-btn').forEach((b) => b.classList.toggle('active', b === btn));
+        [state.range, state.interval] = TF_MAP[v] || ['1y', '1d'];
+        await loadSymbol(state.symbol);
+        chart.showAll(); // fit the full selected range so the change is visible
+      });
     });
+    $('#csvExportBtn').addEventListener('click', exportCsv);
 
     $('#tabLessons').addEventListener('click', () => {
       state.view = 'lessons';
