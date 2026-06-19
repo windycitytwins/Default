@@ -47,6 +47,49 @@
 
   <main class="layout">
     <section class="chart-pane">
+      <nav class="draw-rail" aria-label="Drawing tools">
+        <button class="dr-btn active" data-tool="cursor" title="Cursor — select, move & pan (Esc)" aria-label="Cursor">
+          <svg viewBox="0 0 20 20"><path d="M4 3l13 6-5.5 1.6L9.5 17z" fill="currentColor"/></svg>
+        </button>
+        <button class="dr-btn" data-tool="trend" title="Trend line — drag from A to B" aria-label="Trend line">
+          <svg viewBox="0 0 20 20"><path d="M4 16L16 4" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="4" cy="16" r="1.8" fill="currentColor"/><circle cx="16" cy="4" r="1.8" fill="currentColor"/></svg>
+        </button>
+        <button class="dr-btn" data-tool="ray" title="Ray — line that extends to the right" aria-label="Ray">
+          <svg viewBox="0 0 20 20"><path d="M3 16L19 4" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="4" cy="15.5" r="1.8" fill="currentColor"/></svg>
+        </button>
+        <button class="dr-btn" data-tool="hline" title="Horizontal line" aria-label="Horizontal line">
+          <svg viewBox="0 0 20 20"><path d="M2 10h16" stroke="currentColor" stroke-width="1.7"/></svg>
+        </button>
+        <button class="dr-btn" data-tool="hray" title="Horizontal ray (from click to the right)" aria-label="Horizontal ray">
+          <svg viewBox="0 0 20 20"><path d="M6 10h12" stroke="currentColor" stroke-width="1.7"/><circle cx="6" cy="10" r="1.9" fill="currentColor"/></svg>
+        </button>
+        <button class="dr-btn" data-tool="rect" title="Rectangle — supply / demand zone" aria-label="Rectangle">
+          <svg viewBox="0 0 20 20"><rect x="3.5" y="5" width="13" height="10" rx="1" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
+        </button>
+        <button class="dr-btn" data-tool="fib" title="Fibonacci retracement — drag the swing" aria-label="Fibonacci retracement">
+          <svg viewBox="0 0 20 20"><g stroke="currentColor" stroke-width="1.5"><path d="M3 4h14"/><path d="M3 8h14" opacity=".75"/><path d="M3 12h14" opacity=".55"/><path d="M3 16h14" opacity=".4"/></g></svg>
+        </button>
+        <button class="dr-btn" data-tool="arrow" title="Arrow" aria-label="Arrow">
+          <svg viewBox="0 0 20 20"><path d="M5 15L15 5" stroke="currentColor" stroke-width="1.7"/><path d="M15 5l-5 0M15 5l0 5" stroke="currentColor" stroke-width="1.7" fill="none"/></svg>
+        </button>
+        <button class="dr-btn" data-tool="text" title="Text label" aria-label="Text">
+          <svg viewBox="0 0 20 20"><path d="M4 5h12M10 5v11" stroke="currentColor" stroke-width="1.9"/></svg>
+        </button>
+        <button class="dr-btn" data-tool="measure" title="Measure — price move, % and bar count" aria-label="Measure">
+          <svg viewBox="0 0 20 20"><rect x="3" y="6.5" width="14" height="7" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M7 6.5v3M10 6.5v4M13 6.5v3" stroke="currentColor" stroke-width="1.2"/></svg>
+        </button>
+        <span class="dr-sep"></span>
+        <button class="dr-btn dr-toggle" data-action="magnet" title="Magnet — snap anchors to OHLC" aria-label="Magnet">
+          <svg viewBox="0 0 20 20"><path d="M6 3v7a4 4 0 008 0V3" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M4 3.5h4M12 3.5h4" stroke="currentColor" stroke-width="1.8"/></svg>
+        </button>
+        <button class="dr-btn" data-action="undo" title="Undo last drawing" aria-label="Undo">
+          <svg viewBox="0 0 20 20"><path d="M7.5 7H4V3.5" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M4.2 7.2A7 7 0 113 11" stroke="currentColor" stroke-width="1.7" fill="none"/></svg>
+        </button>
+        <button class="dr-btn" data-action="clear" title="Remove all drawings" aria-label="Clear drawings">
+          <svg viewBox="0 0 20 20"><path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+        </button>
+      </nav>
+      <div class="chart-col">
       <div class="tf-ribbon" id="tfRibbon" role="tablist" aria-label="Chart timeframe">
         <button class="tf-btn" data-range="1d" title="1 day · 2-minute bars">1D</button>
         <button class="tf-btn" data-range="5d" title="5 days · 15-minute bars">5D</button>
@@ -82,8 +125,9 @@
       <div class="chart-footer">
         <span id="dataStatus" class="data-status muted">Loading…</span>
         <span class="live-indicator"><span id="liveDot" class="live-dot" style="display:none"></span><span id="liveText" class="live-text"></span></span>
-        <span class="chart-hint">drag to pan · scroll to zoom · hover for details</span>
+        <span class="chart-hint">drag to pan · scroll to zoom · pick a tool on the left to draw</span>
       </div>
+      </div><!-- /.chart-col -->
     </section>
 
     <aside class="tutor-pane">
@@ -95,6 +139,7 @@
         <button id="tabResearch" class="tab">🏢 Research</button>
         <button id="tabMarkets" class="tab">🗺️ Markets</button>
         <button id="learnBtn" class="tab tab-learn">📖 Learn</button>
+        <button id="sidebarToggle" class="tab tab-collapse" title="Collapse panel for a full-width chart" aria-label="Collapse panel">⟩</button>
       </div>
 
       <!-- LESSONS -->
@@ -255,6 +300,7 @@
         <p class="ctrl-note">Full-market heat map: <a href="https://finviz.com/map.ashx" target="_blank" rel="noopener">finviz.com/map</a></p>
       </div>
     </aside>
+    <button id="sidebarReopen" class="sidebar-reopen" title="Open the analysis panel" aria-label="Open panel" style="display:none">‹ Panel</button>
   </main>
 
   <div id="toast" class="toast"></div>

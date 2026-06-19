@@ -112,13 +112,72 @@ body {
   display: grid;
   grid-template-columns: 1fr 400px;
   min-height: 0;
+  position: relative;
 }
+.layout.sb-collapsed { grid-template-columns: 1fr 0; }
+.layout.sb-collapsed .tutor-pane { display: none; }
+.tab-collapse { margin-left: auto; font-weight: 700; }
+.sidebar-reopen {
+  position: absolute;
+  top: 12px;
+  right: 0;
+  z-index: 6;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-right: none;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 10px;
+  border-radius: 8px 0 0 8px;
+  cursor: pointer;
+}
+.sidebar-reopen:hover { border-color: var(--accent); color: var(--accent); }
 .chart-pane {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   min-width: 0;
   border-right: 1px solid var(--border);
 }
+.chart-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* left drawing-tool rail (TradingView-style) */
+.draw-rail {
+  width: 42px;
+  flex: 0 0 42px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+.dr-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.dr-btn svg { width: 19px; height: 19px; display: block; }
+.dr-btn:hover { background: rgba(120, 150, 230, 0.14); color: var(--text); }
+.dr-btn.active { background: rgba(91, 140, 255, 0.18); color: var(--accent); border-color: rgba(91, 140, 255, 0.5); }
+.dr-toggle.on { background: rgba(255, 209, 102, 0.18); color: #ffd166; border-color: rgba(255, 209, 102, 0.5); }
+.dr-sep { width: 22px; height: 1px; background: var(--border); margin: 5px 0; }
 /* timeframe ribbon (TradingView-style interval buttons) */
 .tf-ribbon {
   display: flex;
@@ -684,6 +743,49 @@ body {
 
   <main class="layout">
     <section class="chart-pane">
+      <nav class="draw-rail" aria-label="Drawing tools">
+        <button class="dr-btn active" data-tool="cursor" title="Cursor — select, move & pan (Esc)" aria-label="Cursor">
+          <svg viewBox="0 0 20 20"><path d="M4 3l13 6-5.5 1.6L9.5 17z" fill="currentColor"/></svg>
+        </button>
+        <button class="dr-btn" data-tool="trend" title="Trend line — drag from A to B" aria-label="Trend line">
+          <svg viewBox="0 0 20 20"><path d="M4 16L16 4" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="4" cy="16" r="1.8" fill="currentColor"/><circle cx="16" cy="4" r="1.8" fill="currentColor"/></svg>
+        </button>
+        <button class="dr-btn" data-tool="ray" title="Ray — line that extends to the right" aria-label="Ray">
+          <svg viewBox="0 0 20 20"><path d="M3 16L19 4" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="4" cy="15.5" r="1.8" fill="currentColor"/></svg>
+        </button>
+        <button class="dr-btn" data-tool="hline" title="Horizontal line" aria-label="Horizontal line">
+          <svg viewBox="0 0 20 20"><path d="M2 10h16" stroke="currentColor" stroke-width="1.7"/></svg>
+        </button>
+        <button class="dr-btn" data-tool="hray" title="Horizontal ray (from click to the right)" aria-label="Horizontal ray">
+          <svg viewBox="0 0 20 20"><path d="M6 10h12" stroke="currentColor" stroke-width="1.7"/><circle cx="6" cy="10" r="1.9" fill="currentColor"/></svg>
+        </button>
+        <button class="dr-btn" data-tool="rect" title="Rectangle — supply / demand zone" aria-label="Rectangle">
+          <svg viewBox="0 0 20 20"><rect x="3.5" y="5" width="13" height="10" rx="1" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
+        </button>
+        <button class="dr-btn" data-tool="fib" title="Fibonacci retracement — drag the swing" aria-label="Fibonacci retracement">
+          <svg viewBox="0 0 20 20"><g stroke="currentColor" stroke-width="1.5"><path d="M3 4h14"/><path d="M3 8h14" opacity=".75"/><path d="M3 12h14" opacity=".55"/><path d="M3 16h14" opacity=".4"/></g></svg>
+        </button>
+        <button class="dr-btn" data-tool="arrow" title="Arrow" aria-label="Arrow">
+          <svg viewBox="0 0 20 20"><path d="M5 15L15 5" stroke="currentColor" stroke-width="1.7"/><path d="M15 5l-5 0M15 5l0 5" stroke="currentColor" stroke-width="1.7" fill="none"/></svg>
+        </button>
+        <button class="dr-btn" data-tool="text" title="Text label" aria-label="Text">
+          <svg viewBox="0 0 20 20"><path d="M4 5h12M10 5v11" stroke="currentColor" stroke-width="1.9"/></svg>
+        </button>
+        <button class="dr-btn" data-tool="measure" title="Measure — price move, % and bar count" aria-label="Measure">
+          <svg viewBox="0 0 20 20"><rect x="3" y="6.5" width="14" height="7" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M7 6.5v3M10 6.5v4M13 6.5v3" stroke="currentColor" stroke-width="1.2"/></svg>
+        </button>
+        <span class="dr-sep"></span>
+        <button class="dr-btn dr-toggle" data-action="magnet" title="Magnet — snap anchors to OHLC" aria-label="Magnet">
+          <svg viewBox="0 0 20 20"><path d="M6 3v7a4 4 0 008 0V3" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M4 3.5h4M12 3.5h4" stroke="currentColor" stroke-width="1.8"/></svg>
+        </button>
+        <button class="dr-btn" data-action="undo" title="Undo last drawing" aria-label="Undo">
+          <svg viewBox="0 0 20 20"><path d="M7.5 7H4V3.5" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M4.2 7.2A7 7 0 113 11" stroke="currentColor" stroke-width="1.7" fill="none"/></svg>
+        </button>
+        <button class="dr-btn" data-action="clear" title="Remove all drawings" aria-label="Clear drawings">
+          <svg viewBox="0 0 20 20"><path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+        </button>
+      </nav>
+      <div class="chart-col">
       <div class="tf-ribbon" id="tfRibbon" role="tablist" aria-label="Chart timeframe">
         <button class="tf-btn" data-range="1d" title="1 day · 2-minute bars">1D</button>
         <button class="tf-btn" data-range="5d" title="5 days · 15-minute bars">5D</button>
@@ -719,8 +821,9 @@ body {
       <div class="chart-footer">
         <span id="dataStatus" class="data-status muted">Loading…</span>
         <span class="live-indicator"><span id="liveDot" class="live-dot" style="display:none"></span><span id="liveText" class="live-text"></span></span>
-        <span class="chart-hint">drag to pan · scroll to zoom · hover for details</span>
+        <span class="chart-hint">drag to pan · scroll to zoom · pick a tool on the left to draw</span>
       </div>
+      </div><!-- /.chart-col -->
     </section>
 
     <aside class="tutor-pane">
@@ -732,6 +835,7 @@ body {
         <button id="tabResearch" class="tab">🏢 Research</button>
         <button id="tabMarkets" class="tab">🗺️ Markets</button>
         <button id="learnBtn" class="tab tab-learn">📖 Learn</button>
+        <button id="sidebarToggle" class="tab tab-collapse" title="Collapse panel for a full-width chart" aria-label="Collapse panel">⟩</button>
       </div>
 
       <!-- LESSONS -->
@@ -892,6 +996,7 @@ body {
         <p class="ctrl-note">Full-market heat map: <a href="https://finviz.com/map.ashx" target="_blank" rel="noopener">finviz.com/map</a></p>
       </div>
     </aside>
+    <button id="sidebarReopen" class="sidebar-reopen" title="Open the analysis panel" aria-label="Open panel" style="display:none">‹ Panel</button>
   </main>
 
   <div id="toast" class="toast"></div>
@@ -1614,6 +1719,16 @@ body {
       this.annotations = []; // {index, price, text, color, dx, dy}
       this.highlights = []; // {from, to, color, label}
 
+      // ---- manual drawings (TradingView-style) ----
+      // Anchored by absolute time (ms) + price so they stay put across timeframe
+      // changes and live updates. type ∈ trend|ray|hline|hray|rect|fib|arrow|text|measure
+      this.drawings = [];
+      this.tool = null; // active drawing tool (null = crosshair/pan)
+      this.magnet = false; // snap anchors to nearest OHLC
+      this.draft = null; // in-progress drawing
+      this.selected = null; // id of the selected drawing
+      this._drawSeq = 0;
+
       this.visStart = 0;
       this.visCount = 120;
       this.hover = null; // {index, x, y}
@@ -1762,6 +1877,46 @@ body {
       this.highlights = [];
       this.requestRender();
     }
+    // ---- manual drawing tools ----------------------------------------------
+    /** Activate a drawing tool (or null/'cursor' for crosshair + pan). */
+    setTool(tool) {
+      this.tool = tool && tool !== 'cursor' ? tool : null;
+      this.draft = null;
+      if (!this.tool) this.selected = null;
+      this.canvas.style.cursor = this.tool ? 'crosshair' : 'default';
+      this.requestRender();
+    }
+    setMagnet(on) {
+      this.magnet = !!on;
+    }
+    getDrawings() {
+      return this.drawings;
+    }
+    loadDrawings(arr) {
+      this.drawings = Array.isArray(arr) ? arr.slice() : [];
+      this._drawSeq = this.drawings.reduce((m, d) => Math.max(m, d.id || 0), 0);
+      this.selected = null;
+      this.requestRender();
+    }
+    clearDrawings() {
+      this.drawings = [];
+      this.selected = null;
+      this._emit('drawingschange', this.drawings);
+      this.requestRender();
+    }
+    undoDrawing() {
+      this.drawings.pop();
+      this.selected = null;
+      this._emit('drawingschange', this.drawings);
+      this.requestRender();
+    }
+    deleteSelected() {
+      if (this.selected == null) return;
+      this.drawings = this.drawings.filter((d) => d.id !== this.selected);
+      this.selected = null;
+      this._emit('drawingschange', this.drawings);
+      this.requestRender();
+    }
     enableClickToMark(on) {
       this.clickMode = on;
       this.canvas.style.cursor = on ? 'crosshair' : 'default';
@@ -1852,6 +2007,65 @@ body {
     }
     _iOf(px, rect) {
       return Math.round((px - rect.x) / this._step(rect) - 0.5) + this.visStart;
+    }
+    _fracIOf(px, rect) {
+      return (px - rect.x) / this._step(rect) - 0.5 + this.visStart;
+    }
+    // ---- time ⇄ fractional-index mapping (so drawings anchor to dates) ----
+    _avgStep() {
+      const n = this.candles.length;
+      if (n < 2) return 86400000;
+      return (this.candles[n - 1].time - this.candles[0].time) / (n - 1) || 86400000;
+    }
+    _fracIndexOfTime(t) {
+      const cs = this.candles;
+      const n = cs.length;
+      if (!n) return 0;
+      if (t <= cs[0].time) return (t - cs[0].time) / this._avgStep();
+      if (t >= cs[n - 1].time) return n - 1 + (t - cs[n - 1].time) / this._avgStep();
+      let lo = 0;
+      let hi = n - 1;
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (cs[mid].time <= t) lo = mid;
+        else hi = mid;
+      }
+      const span = cs[hi].time - cs[lo].time || 1;
+      return lo + (t - cs[lo].time) / span;
+    }
+    _timeOfFracIndex(fi) {
+      const cs = this.candles;
+      const n = cs.length;
+      if (!n) return 0;
+      if (fi <= 0) return cs[0].time + fi * this._avgStep();
+      if (fi >= n - 1) return cs[n - 1].time + (fi - (n - 1)) * this._avgStep();
+      const k = Math.floor(fi);
+      const f = fi - k;
+      return cs[k].time + f * (cs[k + 1].time - cs[k].time);
+    }
+    _xOfT(t, rect) {
+      return this._xOf(this._fracIndexOfTime(t), rect);
+    }
+    _tOfX(px, rect) {
+      return this._timeOfFracIndex(this._fracIOf(px, rect));
+    }
+    /** Map a pixel to a {t, price} drawing anchor, snapping to OHLC if magnet on. */
+    _anchorAt(px, py) {
+      const rect = this._L ? this._L.price : { x: this._pad.left, w: this.cssW, h: this.cssH };
+      let t = this._tOfX(px, rect);
+      let price = this._priceOf ? this._priceOf(py) : 0;
+      if (this.magnet) {
+        const i = Math.max(0, Math.min(this.candles.length - 1, Math.round(this._fracIOf(px, rect))));
+        const c = this.candles[i];
+        if (c) {
+          const cands = [c.open, c.high, c.low, c.close];
+          let best = cands[0];
+          for (const v of cands) if (Math.abs(v - price) < Math.abs(best - price)) best = v;
+          price = best;
+          t = c.time;
+        }
+      }
+      return { t, price };
     }
 
     _priceScale() {
@@ -1962,6 +2176,7 @@ body {
       if (this.flags.macd && L.macd) this._drawMACD(L.macd);
       this._drawMarkers(L, yOf);
       this._drawAnnotations(L, yOf);
+      this._drawDrawings(L, yOf);
       this._drawPriceAxis(L, scale, yOf);
       this._drawTimeAxis(L);
       this._drawCrosshair(L, yOf);
@@ -2584,6 +2799,288 @@ body {
       ctx.closePath();
     }
 
+    // ---- manual drawing rendering ------------------------------------------
+    _rgba(col, a) {
+      if (!col) return `rgba(91,140,255,${a})`;
+      if (col[0] === '#') {
+        let h = col.slice(1);
+        if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+        const n = parseInt(h, 16);
+        return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+      }
+      const m = col.match(/rgba?\(([^)]+)\)/);
+      if (m) return `rgba(${m[1].split(',').slice(0, 3).map((s) => s.trim()).join(',')},${a})`;
+      return col;
+    }
+    _handle(x, y) {
+      const ctx = this.ctx;
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = '#5b8cff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    _arrowHead(bx, by, ang, col) {
+      const ctx = this.ctx;
+      const len = 12;
+      const spread = 0.42;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx - len * Math.cos(ang - spread), by - len * Math.sin(ang - spread));
+      ctx.lineTo(bx - len * Math.cos(ang + spread), by - len * Math.sin(ang + spread));
+      ctx.closePath();
+      ctx.fill();
+    }
+    _rightTag(R, y, text, col) {
+      const ctx = this.ctx;
+      ctx.font = '11px system-ui, sans-serif';
+      const tw = ctx.measureText(text).width + 10;
+      ctx.fillStyle = col;
+      ctx.fillRect(R.x + R.w - tw, y - 8, tw, 16);
+      ctx.fillStyle = '#0e1320';
+      ctx.textAlign = 'right';
+      ctx.fillText(text, R.x + R.w - 5, y + 4);
+    }
+
+    _drawDrawings(L, yOf) {
+      const ctx = this.ctx;
+      const list = this.draft ? this.drawings.concat([this.draft]) : this.drawings;
+      if (!list.length) return;
+      const R = L.price;
+      const X = (t) => this._xOfT(t, R);
+      const Y = (p) => yOf(p);
+      const rightX = R.x + R.w;
+      const FIB = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+      for (const d of list) {
+        const sel = d.id != null && d.id === this.selected;
+        const col = d.color || '#5b8cff';
+        const lw = (d.width || 1.6) + (sel ? 0.8 : 0);
+
+        if (d.type === 'trend' || d.type === 'arrow' || d.type === 'ray') {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(R.x, R.y, R.w, R.h);
+          ctx.clip();
+          const ax = X(d.a.t);
+          const ay = Y(d.a.price);
+          let bx = X(d.b.t);
+          let by = Y(d.b.price);
+          if (d.type === 'ray') {
+            const dx = bx - ax;
+            const dy = by - ay;
+            if (Math.abs(dx) > 0.001) {
+              const k = (rightX - ax) / dx;
+              if (k > 1) {
+                bx = ax + dx * k;
+                by = ay + dy * k;
+              }
+            }
+          }
+          ctx.strokeStyle = col;
+          ctx.lineWidth = lw;
+          ctx.setLineDash(d.dash || []);
+          ctx.beginPath();
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(bx, by);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          if (d.type === 'arrow') this._arrowHead(X(d.b.t), Y(d.b.price), Math.atan2(Y(d.b.price) - ay, X(d.b.t) - ax), col);
+          ctx.restore();
+          if (sel) {
+            this._handle(ax, ay);
+            this._handle(X(d.b.t), Y(d.b.price));
+          }
+        } else if (d.type === 'hline' || d.type === 'hray') {
+          const y = Math.round(Y(d.a.price)) + 0.5;
+          if (y < R.y - 2 || y > R.y + R.h + 2) continue;
+          const x0 = d.type === 'hray' ? Math.max(R.x, X(d.a.t)) : R.x;
+          ctx.strokeStyle = col;
+          ctx.lineWidth = lw;
+          ctx.setLineDash(d.dash || []);
+          ctx.beginPath();
+          ctx.moveTo(x0, y);
+          ctx.lineTo(rightX, y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          this._rightTag(R, y, fmtPrice(d.a.price), col);
+          if (sel) this._handle(d.type === 'hray' ? X(d.a.t) : R.x + 30, Y(d.a.price));
+        } else if (d.type === 'rect') {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(R.x, R.y, R.w, R.h);
+          ctx.clip();
+          const x0 = Math.min(X(d.a.t), X(d.b.t));
+          const x1 = Math.max(X(d.a.t), X(d.b.t));
+          const y0 = Math.min(Y(d.a.price), Y(d.b.price));
+          const y1 = Math.max(Y(d.a.price), Y(d.b.price));
+          ctx.fillStyle = d.fill || this._rgba(col, 0.13);
+          ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+          ctx.strokeStyle = col;
+          ctx.lineWidth = lw;
+          ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+          ctx.restore();
+          if (sel) {
+            this._handle(X(d.a.t), Y(d.a.price));
+            this._handle(X(d.b.t), Y(d.b.price));
+          }
+        } else if (d.type === 'fib') {
+          const x0 = Math.max(R.x, Math.min(X(d.a.t), X(d.b.t)));
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(R.x, R.y, R.w, R.h);
+          ctx.clip();
+          let prevY = null;
+          FIB.forEach((r, k) => {
+            const price = d.b.price + r * (d.a.price - d.b.price);
+            const y = Y(price);
+            const mid = r > 0 && r < 1;
+            if (prevY != null) {
+              ctx.fillStyle = this._rgba(col, k % 2 ? 0.04 : 0.08);
+              ctx.fillRect(x0, Math.min(prevY, y), rightX - x0, Math.abs(y - prevY));
+            }
+            prevY = y;
+            ctx.strokeStyle = mid ? this._rgba('#ffc85a', 0.85) : this._rgba(col, 0.9);
+            ctx.lineWidth = sel ? 1.6 : 1;
+            ctx.beginPath();
+            ctx.moveTo(x0, Math.round(y) + 0.5);
+            ctx.lineTo(rightX, Math.round(y) + 0.5);
+            ctx.stroke();
+            ctx.fillStyle = mid ? '#ffd98a' : this.theme.text;
+            ctx.font = '10px system-ui, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(`${(r * 100).toFixed(1).replace(/\.0$/, '')}%  ${fmtPrice(price)}`, x0 + 4, y - 2);
+          });
+          ctx.restore();
+          if (sel) {
+            this._handle(X(d.a.t), Y(d.a.price));
+            this._handle(X(d.b.t), Y(d.b.price));
+          }
+        } else if (d.type === 'measure') {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(R.x, R.y, R.w, R.h);
+          ctx.clip();
+          const x0 = Math.min(X(d.a.t), X(d.b.t));
+          const x1 = Math.max(X(d.a.t), X(d.b.t));
+          const y0 = Y(d.a.price);
+          const y1 = Y(d.b.price);
+          const up = d.b.price >= d.a.price;
+          ctx.fillStyle = up ? 'rgba(38,161,123,0.16)' : 'rgba(224,86,106,0.16)';
+          ctx.fillRect(x0, Math.min(y0, y1), x1 - x0, Math.abs(y1 - y0));
+          ctx.strokeStyle = up ? this.theme.up : this.theme.down;
+          ctx.lineWidth = 1.4;
+          ctx.strokeRect(x0, Math.min(y0, y1), x1 - x0, Math.abs(y1 - y0));
+          // arrow showing direction
+          const mx = (x0 + x1) / 2;
+          ctx.beginPath();
+          ctx.moveTo(mx, y0);
+          ctx.lineTo(mx, y1);
+          ctx.stroke();
+          this._arrowHead(mx, y1, up ? Math.PI / 2 : -Math.PI / 2, up ? this.theme.up : this.theme.down);
+          ctx.restore();
+          const dPrice = d.b.price - d.a.price;
+          const dPct = d.a.price ? (dPrice / d.a.price) * 100 : 0;
+          const bars = Math.round(Math.abs(this._fracIndexOfTime(d.b.t) - this._fracIndexOfTime(d.a.t)));
+          const label = `${dPrice >= 0 ? '+' : ''}${fmtPrice(dPrice)} (${dPrice >= 0 ? '+' : ''}${dPct.toFixed(2)}%)  ${bars} bars`;
+          ctx.font = 'bold 11px system-ui, sans-serif';
+          const tw = ctx.measureText(label).width + 12;
+          const lx = Math.max(R.x, Math.min(mx - tw / 2, R.x + R.w - tw));
+          const ly = Math.min(y0, y1) - 22;
+          ctx.fillStyle = up ? this.theme.up : this.theme.down;
+          this._roundRect(lx, ly, tw, 18, 4);
+          ctx.fill();
+          ctx.fillStyle = '#0e1320';
+          ctx.textAlign = 'left';
+          ctx.fillText(label, lx + 6, ly + 13);
+        } else if (d.type === 'text') {
+          const tx = X(d.a.t);
+          const ty = Y(d.a.price);
+          const label = d.text || 'Text';
+          ctx.font = '12px system-ui, sans-serif';
+          const tw = ctx.measureText(label).width + 12;
+          ctx.fillStyle = 'rgba(20,26,40,0.9)';
+          ctx.strokeStyle = col;
+          ctx.lineWidth = sel ? 1.6 : 1;
+          this._roundRect(tx, ty - 9, tw, 18, 4);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = col;
+          ctx.textAlign = 'left';
+          ctx.fillText(label, tx + 6, ty + 4);
+          if (sel) this._handle(tx, ty);
+        }
+      }
+    }
+
+    // ---- drawing hit-testing & geometry ------------------------------------
+    _distToSeg(px, py, x1, y1, x2, y2) {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len2 = dx * dx + dy * dy;
+      let t = len2 ? ((px - x1) * dx + (py - y1) * dy) / len2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      const cx = x1 + t * dx;
+      const cy = y1 + t * dy;
+      return Math.hypot(px - cx, py - cy);
+    }
+    /** Return the topmost drawing under the pixel, or null. */
+    _hitDrawing(px, py) {
+      const R = this._L ? this._L.price : null;
+      if (!R) return null;
+      const X = (t) => this._xOfT(t, R);
+      const Y = (p) => this._yOf(p);
+      const rightX = R.x + R.w;
+      const TOL = 7;
+      for (let k = this.drawings.length - 1; k >= 0; k--) {
+        const d = this.drawings[k];
+        if (d.type === 'trend' || d.type === 'arrow' || d.type === 'ray') {
+          const ax = X(d.a.t);
+          const ay = Y(d.a.price);
+          let bx = X(d.b.t);
+          let by = Y(d.b.price);
+          if (d.type === 'ray') {
+            const dx = bx - ax;
+            const dy = by - ay;
+            if (Math.abs(dx) > 0.001) {
+              const c = (rightX - ax) / dx;
+              if (c > 1) {
+                bx = ax + dx * c;
+                by = ay + dy * c;
+              }
+            }
+          }
+          if (this._distToSeg(px, py, ax, ay, bx, by) <= TOL) return d;
+        } else if (d.type === 'hline' || d.type === 'hray') {
+          const y = Y(d.a.price);
+          const x0 = d.type === 'hray' ? X(d.a.t) : R.x;
+          if (Math.abs(py - y) <= TOL && px >= x0 - 2 && px <= rightX) return d;
+        } else if (d.type === 'rect' || d.type === 'measure') {
+          const x0 = Math.min(X(d.a.t), X(d.b.t));
+          const x1 = Math.max(X(d.a.t), X(d.b.t));
+          const y0 = Math.min(Y(d.a.price), Y(d.b.price));
+          const y1 = Math.max(Y(d.a.price), Y(d.b.price));
+          if (px >= x0 - TOL && px <= x1 + TOL && py >= y0 - TOL && py <= y1 + TOL) return d;
+        } else if (d.type === 'fib') {
+          const hi = d.a.price;
+          const lo = d.b.price;
+          for (const r of [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]) {
+            if (Math.abs(py - Y(lo + r * (hi - lo))) <= TOL) return d;
+          }
+        } else if (d.type === 'text') {
+          const tx = X(d.a.t);
+          const ty = Y(d.a.price);
+          if (px >= tx - 4 && px <= tx + 80 && Math.abs(py - ty) <= 12) return d;
+        }
+      }
+      return null;
+    }
+    _twoPointTool(t) {
+      return t === 'trend' || t === 'ray' || t === 'rect' || t === 'fib' || t === 'arrow' || t === 'measure';
+    }
+
     _drawPriceAxis(L, scale, yOf) {
       const ctx = this.ctx;
       ctx.fillStyle = this.theme.text;
@@ -2795,15 +3292,46 @@ body {
     // ---- events ------------------------------------------------------------
     _setupEvents() {
       const c = this.canvas;
-      let dragging = false;
+      let dragging = false; // panning
       let moved = false;
       let lastX = 0;
-      let downStart = 0;
 
       c.addEventListener('mousemove', (ev) => {
         const r = c.getBoundingClientRect();
         const px = ev.clientX - r.left;
         const py = ev.clientY - r.top;
+
+        // 1) drawing a new shape with an active tool
+        if (this._drawing && this.draft && this._L) {
+          const an = this._anchorAt(px, py);
+          if (this.draft.type === 'hline' || this.draft.type === 'hray') this.draft.a.price = an.price;
+          else this.draft.b = an;
+          moved = true;
+          this.hover = { index: this._iOf(px, this._L.price), x: px, y: py };
+          this.requestRender();
+          return;
+        }
+        // 2) moving an already-selected drawing
+        if (this._dragDraw && this._L) {
+          const an = this._anchorAt(px, py);
+          const dt = an.t - this._dragDraw.lastT;
+          const dp = an.price - this._dragDraw.lastPrice;
+          const d = this.drawings.find((x) => x.id === this._dragDraw.id);
+          if (d) {
+            d.a.t += dt;
+            d.a.price += dp;
+            if (d.b) {
+              d.b.t += dt;
+              d.b.price += dp;
+            }
+          }
+          this._dragDraw.lastT = an.t;
+          this._dragDraw.lastPrice = an.price;
+          moved = true;
+          this.requestRender();
+          return;
+        }
+        // 3) panning
         if (dragging) {
           const dxPix = px - lastX;
           const step = this._step(this._L ? this._L.price : { w: this.cssW });
@@ -2816,6 +3344,9 @@ body {
             lastX = px;
             moved = true;
           }
+        } else if (!this.tool && !this.clickMode) {
+          // hover feedback: 'move' cursor when over a selectable drawing
+          c.style.cursor = this._hitDrawing(px, py) ? 'move' : 'default';
         }
         const idx = this._L ? this._iOf(px, this._L.price) : 0;
         this.hover = { index: idx, x: px, y: py };
@@ -2829,13 +3360,88 @@ body {
       });
       c.addEventListener('mousedown', (ev) => {
         const r = c.getBoundingClientRect();
-        lastX = ev.clientX - r.left;
-        downStart = lastX;
-        dragging = !this.clickMode;
+        const px = ev.clientX - r.left;
+        const py = ev.clientY - r.top;
+        lastX = px;
         moved = false;
-        if (!this.clickMode) c.style.cursor = 'grabbing';
+        dragging = false;
+
+        if (this.clickMode) return; // lesson exercise click-to-mark
+
+        // start a new drawing with the active tool
+        if (this.tool && this._L) {
+          const an = this._anchorAt(px, py);
+          const id = ++this._drawSeq;
+          if (this.tool === 'text') {
+            this.draft = { id, type: 'text', a: an, color: '#e8edf6' };
+          } else if (this.tool === 'hline' || this.tool === 'hray') {
+            this.draft = { id, type: this.tool, a: an, color: '#5b8cff' };
+          } else {
+            const color =
+              this.tool === 'arrow' ? '#ffd166' : this.tool === 'measure' ? '#9aa6bf' : '#5b8cff';
+            this.draft = { id, type: this.tool, a: an, b: { t: an.t, price: an.price }, color };
+          }
+          this._drawing = true;
+          this.requestRender();
+          return;
+        }
+
+        // cursor mode: grab a drawing under the pointer, else pan
+        if (this._L) {
+          const hit = this._hitDrawing(px, py);
+          if (hit) {
+            this.selected = hit.id;
+            const an = this._anchorAt(px, py);
+            this._dragDraw = { id: hit.id, lastT: an.t, lastPrice: an.price };
+            c.style.cursor = 'grabbing';
+            this.requestRender();
+            return;
+          }
+          this.selected = null;
+        }
+        dragging = true;
+        c.style.cursor = 'grabbing';
+        this.requestRender();
       });
       window.addEventListener('mouseup', (ev) => {
+        // finish a new drawing
+        if (this._drawing && this.draft) {
+          this._drawing = false;
+          const d = this.draft;
+          this.draft = null;
+          const commit = () => {
+            d.id = d.id || ++this._drawSeq;
+            this.drawings.push(d);
+            this.selected = d.id;
+            this._emit('drawingschange', this.drawings);
+          };
+          if (d.type === 'text') {
+            const txt = (window.prompt('Text label:') || '').trim();
+            if (txt) {
+              d.text = txt;
+              commit();
+            }
+          } else if (this._twoPointTool(d.type)) {
+            const adx = Math.abs(this._xOfT(d.a.t, this._L.price) - this._xOfT(d.b.t, this._L.price));
+            const ady = Math.abs(this._yOf(d.a.price) - this._yOf(d.b.price));
+            if (adx + ady > 4) commit(); // ignore an accidental click with no drag
+          } else {
+            commit(); // hline / hray: a single click places it
+          }
+          this.tool = null; // return to the cursor after drawing (TradingView default)
+          c.style.cursor = 'default';
+          this._emit('toolend', null);
+          this.requestRender();
+          return;
+        }
+        // finish moving a drawing
+        if (this._dragDraw) {
+          this._dragDraw = null;
+          c.style.cursor = 'default';
+          this._emit('drawingschange', this.drawings);
+          this.requestRender();
+          return;
+        }
         if (!dragging && !this.clickMode) return;
         const wasDrag = moved;
         dragging = false;
@@ -2849,6 +3455,23 @@ body {
             const price = this._priceOf(py);
             this._emit('click', { index: idx, price, x: px, y: py });
           }
+        }
+      });
+      window.addEventListener('keydown', (ev) => {
+        const ae = document.activeElement;
+        const inField = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
+        if (ev.key === 'Escape') {
+          if (this._drawing || this.draft || this.tool) {
+            this._drawing = false;
+            this.draft = null;
+            this.tool = null;
+            c.style.cursor = 'default';
+            this._emit('toolend', null);
+            this.requestRender();
+          }
+        } else if ((ev.key === 'Delete' || ev.key === 'Backspace') && this.selected != null && !inField) {
+          ev.preventDefault();
+          this.deleteSelected();
         }
       });
       c.addEventListener(
@@ -4581,6 +5204,28 @@ body {
     } catch (_) {}
   }
 
+  // Manual drawings persist per ticker (anchored by timestamp, so they survive
+  // timeframe changes and live updates).
+  const DRAW_KEY = 'chartSchool.draw.v1';
+  function loadDrawingStore() {
+    try {
+      return JSON.parse(localStorage.getItem(DRAW_KEY) || '{}');
+    } catch (_) {
+      return {};
+    }
+  }
+  function drawingsFor(sym) {
+    return loadDrawingStore()[sym] || [];
+  }
+  function saveDrawingsFor(sym, arr) {
+    const store = loadDrawingStore();
+    if (arr && arr.length) store[sym] = arr;
+    else delete store[sym];
+    try {
+      localStorage.setItem(DRAW_KEY, JSON.stringify(store));
+    } catch (_) {}
+  }
+
   // ---- data ----------------------------------------------------------------
   function renderCurrentView() {
     if (state.view === 'lessons') renderStep();
@@ -4608,6 +5253,7 @@ body {
       });
       state.data = data;
       chart.setData(data);
+      chart.loadDrawings(drawingsFor(state.symbol));
       renderHeader();
       markUpdated(data);
       // Always show the EMA/SMA suite on the trading chart (lessons set their own).
@@ -5775,9 +6421,55 @@ body {
         loadSymbol(state.symbol);
       });
 
+    bindDrawTools();
+    bindSidebar();
+
     // error overlay actions
     $('#errRetry').addEventListener('click', () => loadSymbol(state.symbol));
     $('#errSample').addEventListener('click', useSampleData);
+  }
+
+  // Wire the left drawing rail to the chart's drawing engine.
+  function bindDrawTools() {
+    const rail = $('.draw-rail');
+    if (!rail || !chart) return;
+    const toolBtns = rail.querySelectorAll('.dr-btn[data-tool]');
+    const setActive = (btn) => toolBtns.forEach((b) => b.classList.toggle('active', b === btn));
+    toolBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        chart.setTool(btn.dataset.tool);
+        setActive(btn);
+      });
+    });
+    const magnetBtn = rail.querySelector('[data-action="magnet"]');
+    magnetBtn.addEventListener('click', () => {
+      const on = !magnetBtn.classList.contains('on');
+      magnetBtn.classList.toggle('on', on);
+      chart.setMagnet(on);
+      toast(on ? '🧲 Magnet on — anchors snap to OHLC' : 'Magnet off');
+    });
+    rail.querySelector('[data-action="undo"]').addEventListener('click', () => chart.undoDrawing());
+    rail.querySelector('[data-action="clear"]').addEventListener('click', () => {
+      if (chart.getDrawings().length && confirm('Remove all drawings on this chart?')) chart.clearDrawings();
+    });
+    // after a shape is finished the chart reverts to the cursor — reflect that
+    chart.on('toolend', () => setActive(rail.querySelector('[data-tool="cursor"]')));
+    // persist drawings per ticker whenever they change
+    chart.on('drawingschange', (arr) => saveDrawingsFor(state.symbol, arr));
+  }
+
+  // Collapse the analysis panel for a full-width, TradingView-style chart.
+  function bindSidebar() {
+    const layout = $('.layout');
+    const reopen = $('#sidebarReopen');
+    const toggle = $('#sidebarToggle');
+    if (!layout || !reopen || !toggle) return;
+    const setCollapsed = (on) => {
+      layout.classList.toggle('sb-collapsed', on);
+      reopen.style.display = on ? 'block' : 'none';
+    };
+    toggle.addEventListener('click', () => setCollapsed(true));
+    reopen.addEventListener('click', () => setCollapsed(false));
   }
 
   // ---- boot ----------------------------------------------------------------

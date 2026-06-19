@@ -75,6 +75,16 @@
       this.annotations = []; // {index, price, text, color, dx, dy}
       this.highlights = []; // {from, to, color, label}
 
+      // ---- manual drawings (TradingView-style) ----
+      // Anchored by absolute time (ms) + price so they stay put across timeframe
+      // changes and live updates. type ∈ trend|ray|hline|hray|rect|fib|arrow|text|measure
+      this.drawings = [];
+      this.tool = null; // active drawing tool (null = crosshair/pan)
+      this.magnet = false; // snap anchors to nearest OHLC
+      this.draft = null; // in-progress drawing
+      this.selected = null; // id of the selected drawing
+      this._drawSeq = 0;
+
       this.visStart = 0;
       this.visCount = 120;
       this.hover = null; // {index, x, y}
@@ -223,6 +233,46 @@
       this.highlights = [];
       this.requestRender();
     }
+    // ---- manual drawing tools ----------------------------------------------
+    /** Activate a drawing tool (or null/'cursor' for crosshair + pan). */
+    setTool(tool) {
+      this.tool = tool && tool !== 'cursor' ? tool : null;
+      this.draft = null;
+      if (!this.tool) this.selected = null;
+      this.canvas.style.cursor = this.tool ? 'crosshair' : 'default';
+      this.requestRender();
+    }
+    setMagnet(on) {
+      this.magnet = !!on;
+    }
+    getDrawings() {
+      return this.drawings;
+    }
+    loadDrawings(arr) {
+      this.drawings = Array.isArray(arr) ? arr.slice() : [];
+      this._drawSeq = this.drawings.reduce((m, d) => Math.max(m, d.id || 0), 0);
+      this.selected = null;
+      this.requestRender();
+    }
+    clearDrawings() {
+      this.drawings = [];
+      this.selected = null;
+      this._emit('drawingschange', this.drawings);
+      this.requestRender();
+    }
+    undoDrawing() {
+      this.drawings.pop();
+      this.selected = null;
+      this._emit('drawingschange', this.drawings);
+      this.requestRender();
+    }
+    deleteSelected() {
+      if (this.selected == null) return;
+      this.drawings = this.drawings.filter((d) => d.id !== this.selected);
+      this.selected = null;
+      this._emit('drawingschange', this.drawings);
+      this.requestRender();
+    }
     enableClickToMark(on) {
       this.clickMode = on;
       this.canvas.style.cursor = on ? 'crosshair' : 'default';
@@ -313,6 +363,65 @@
     }
     _iOf(px, rect) {
       return Math.round((px - rect.x) / this._step(rect) - 0.5) + this.visStart;
+    }
+    _fracIOf(px, rect) {
+      return (px - rect.x) / this._step(rect) - 0.5 + this.visStart;
+    }
+    // ---- time ⇄ fractional-index mapping (so drawings anchor to dates) ----
+    _avgStep() {
+      const n = this.candles.length;
+      if (n < 2) return 86400000;
+      return (this.candles[n - 1].time - this.candles[0].time) / (n - 1) || 86400000;
+    }
+    _fracIndexOfTime(t) {
+      const cs = this.candles;
+      const n = cs.length;
+      if (!n) return 0;
+      if (t <= cs[0].time) return (t - cs[0].time) / this._avgStep();
+      if (t >= cs[n - 1].time) return n - 1 + (t - cs[n - 1].time) / this._avgStep();
+      let lo = 0;
+      let hi = n - 1;
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (cs[mid].time <= t) lo = mid;
+        else hi = mid;
+      }
+      const span = cs[hi].time - cs[lo].time || 1;
+      return lo + (t - cs[lo].time) / span;
+    }
+    _timeOfFracIndex(fi) {
+      const cs = this.candles;
+      const n = cs.length;
+      if (!n) return 0;
+      if (fi <= 0) return cs[0].time + fi * this._avgStep();
+      if (fi >= n - 1) return cs[n - 1].time + (fi - (n - 1)) * this._avgStep();
+      const k = Math.floor(fi);
+      const f = fi - k;
+      return cs[k].time + f * (cs[k + 1].time - cs[k].time);
+    }
+    _xOfT(t, rect) {
+      return this._xOf(this._fracIndexOfTime(t), rect);
+    }
+    _tOfX(px, rect) {
+      return this._timeOfFracIndex(this._fracIOf(px, rect));
+    }
+    /** Map a pixel to a {t, price} drawing anchor, snapping to OHLC if magnet on. */
+    _anchorAt(px, py) {
+      const rect = this._L ? this._L.price : { x: this._pad.left, w: this.cssW, h: this.cssH };
+      let t = this._tOfX(px, rect);
+      let price = this._priceOf ? this._priceOf(py) : 0;
+      if (this.magnet) {
+        const i = Math.max(0, Math.min(this.candles.length - 1, Math.round(this._fracIOf(px, rect))));
+        const c = this.candles[i];
+        if (c) {
+          const cands = [c.open, c.high, c.low, c.close];
+          let best = cands[0];
+          for (const v of cands) if (Math.abs(v - price) < Math.abs(best - price)) best = v;
+          price = best;
+          t = c.time;
+        }
+      }
+      return { t, price };
     }
 
     _priceScale() {
@@ -423,6 +532,7 @@
       if (this.flags.macd && L.macd) this._drawMACD(L.macd);
       this._drawMarkers(L, yOf);
       this._drawAnnotations(L, yOf);
+      this._drawDrawings(L, yOf);
       this._drawPriceAxis(L, scale, yOf);
       this._drawTimeAxis(L);
       this._drawCrosshair(L, yOf);
@@ -1045,6 +1155,288 @@
       ctx.closePath();
     }
 
+    // ---- manual drawing rendering ------------------------------------------
+    _rgba(col, a) {
+      if (!col) return `rgba(91,140,255,${a})`;
+      if (col[0] === '#') {
+        let h = col.slice(1);
+        if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+        const n = parseInt(h, 16);
+        return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+      }
+      const m = col.match(/rgba?\(([^)]+)\)/);
+      if (m) return `rgba(${m[1].split(',').slice(0, 3).map((s) => s.trim()).join(',')},${a})`;
+      return col;
+    }
+    _handle(x, y) {
+      const ctx = this.ctx;
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = '#5b8cff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    _arrowHead(bx, by, ang, col) {
+      const ctx = this.ctx;
+      const len = 12;
+      const spread = 0.42;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx - len * Math.cos(ang - spread), by - len * Math.sin(ang - spread));
+      ctx.lineTo(bx - len * Math.cos(ang + spread), by - len * Math.sin(ang + spread));
+      ctx.closePath();
+      ctx.fill();
+    }
+    _rightTag(R, y, text, col) {
+      const ctx = this.ctx;
+      ctx.font = '11px system-ui, sans-serif';
+      const tw = ctx.measureText(text).width + 10;
+      ctx.fillStyle = col;
+      ctx.fillRect(R.x + R.w - tw, y - 8, tw, 16);
+      ctx.fillStyle = '#0e1320';
+      ctx.textAlign = 'right';
+      ctx.fillText(text, R.x + R.w - 5, y + 4);
+    }
+
+    _drawDrawings(L, yOf) {
+      const ctx = this.ctx;
+      const list = this.draft ? this.drawings.concat([this.draft]) : this.drawings;
+      if (!list.length) return;
+      const R = L.price;
+      const X = (t) => this._xOfT(t, R);
+      const Y = (p) => yOf(p);
+      const rightX = R.x + R.w;
+      const FIB = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+      for (const d of list) {
+        const sel = d.id != null && d.id === this.selected;
+        const col = d.color || '#5b8cff';
+        const lw = (d.width || 1.6) + (sel ? 0.8 : 0);
+
+        if (d.type === 'trend' || d.type === 'arrow' || d.type === 'ray') {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(R.x, R.y, R.w, R.h);
+          ctx.clip();
+          const ax = X(d.a.t);
+          const ay = Y(d.a.price);
+          let bx = X(d.b.t);
+          let by = Y(d.b.price);
+          if (d.type === 'ray') {
+            const dx = bx - ax;
+            const dy = by - ay;
+            if (Math.abs(dx) > 0.001) {
+              const k = (rightX - ax) / dx;
+              if (k > 1) {
+                bx = ax + dx * k;
+                by = ay + dy * k;
+              }
+            }
+          }
+          ctx.strokeStyle = col;
+          ctx.lineWidth = lw;
+          ctx.setLineDash(d.dash || []);
+          ctx.beginPath();
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(bx, by);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          if (d.type === 'arrow') this._arrowHead(X(d.b.t), Y(d.b.price), Math.atan2(Y(d.b.price) - ay, X(d.b.t) - ax), col);
+          ctx.restore();
+          if (sel) {
+            this._handle(ax, ay);
+            this._handle(X(d.b.t), Y(d.b.price));
+          }
+        } else if (d.type === 'hline' || d.type === 'hray') {
+          const y = Math.round(Y(d.a.price)) + 0.5;
+          if (y < R.y - 2 || y > R.y + R.h + 2) continue;
+          const x0 = d.type === 'hray' ? Math.max(R.x, X(d.a.t)) : R.x;
+          ctx.strokeStyle = col;
+          ctx.lineWidth = lw;
+          ctx.setLineDash(d.dash || []);
+          ctx.beginPath();
+          ctx.moveTo(x0, y);
+          ctx.lineTo(rightX, y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          this._rightTag(R, y, fmtPrice(d.a.price), col);
+          if (sel) this._handle(d.type === 'hray' ? X(d.a.t) : R.x + 30, Y(d.a.price));
+        } else if (d.type === 'rect') {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(R.x, R.y, R.w, R.h);
+          ctx.clip();
+          const x0 = Math.min(X(d.a.t), X(d.b.t));
+          const x1 = Math.max(X(d.a.t), X(d.b.t));
+          const y0 = Math.min(Y(d.a.price), Y(d.b.price));
+          const y1 = Math.max(Y(d.a.price), Y(d.b.price));
+          ctx.fillStyle = d.fill || this._rgba(col, 0.13);
+          ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+          ctx.strokeStyle = col;
+          ctx.lineWidth = lw;
+          ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+          ctx.restore();
+          if (sel) {
+            this._handle(X(d.a.t), Y(d.a.price));
+            this._handle(X(d.b.t), Y(d.b.price));
+          }
+        } else if (d.type === 'fib') {
+          const x0 = Math.max(R.x, Math.min(X(d.a.t), X(d.b.t)));
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(R.x, R.y, R.w, R.h);
+          ctx.clip();
+          let prevY = null;
+          FIB.forEach((r, k) => {
+            const price = d.b.price + r * (d.a.price - d.b.price);
+            const y = Y(price);
+            const mid = r > 0 && r < 1;
+            if (prevY != null) {
+              ctx.fillStyle = this._rgba(col, k % 2 ? 0.04 : 0.08);
+              ctx.fillRect(x0, Math.min(prevY, y), rightX - x0, Math.abs(y - prevY));
+            }
+            prevY = y;
+            ctx.strokeStyle = mid ? this._rgba('#ffc85a', 0.85) : this._rgba(col, 0.9);
+            ctx.lineWidth = sel ? 1.6 : 1;
+            ctx.beginPath();
+            ctx.moveTo(x0, Math.round(y) + 0.5);
+            ctx.lineTo(rightX, Math.round(y) + 0.5);
+            ctx.stroke();
+            ctx.fillStyle = mid ? '#ffd98a' : this.theme.text;
+            ctx.font = '10px system-ui, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(`${(r * 100).toFixed(1).replace(/\.0$/, '')}%  ${fmtPrice(price)}`, x0 + 4, y - 2);
+          });
+          ctx.restore();
+          if (sel) {
+            this._handle(X(d.a.t), Y(d.a.price));
+            this._handle(X(d.b.t), Y(d.b.price));
+          }
+        } else if (d.type === 'measure') {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(R.x, R.y, R.w, R.h);
+          ctx.clip();
+          const x0 = Math.min(X(d.a.t), X(d.b.t));
+          const x1 = Math.max(X(d.a.t), X(d.b.t));
+          const y0 = Y(d.a.price);
+          const y1 = Y(d.b.price);
+          const up = d.b.price >= d.a.price;
+          ctx.fillStyle = up ? 'rgba(38,161,123,0.16)' : 'rgba(224,86,106,0.16)';
+          ctx.fillRect(x0, Math.min(y0, y1), x1 - x0, Math.abs(y1 - y0));
+          ctx.strokeStyle = up ? this.theme.up : this.theme.down;
+          ctx.lineWidth = 1.4;
+          ctx.strokeRect(x0, Math.min(y0, y1), x1 - x0, Math.abs(y1 - y0));
+          // arrow showing direction
+          const mx = (x0 + x1) / 2;
+          ctx.beginPath();
+          ctx.moveTo(mx, y0);
+          ctx.lineTo(mx, y1);
+          ctx.stroke();
+          this._arrowHead(mx, y1, up ? Math.PI / 2 : -Math.PI / 2, up ? this.theme.up : this.theme.down);
+          ctx.restore();
+          const dPrice = d.b.price - d.a.price;
+          const dPct = d.a.price ? (dPrice / d.a.price) * 100 : 0;
+          const bars = Math.round(Math.abs(this._fracIndexOfTime(d.b.t) - this._fracIndexOfTime(d.a.t)));
+          const label = `${dPrice >= 0 ? '+' : ''}${fmtPrice(dPrice)} (${dPrice >= 0 ? '+' : ''}${dPct.toFixed(2)}%)  ${bars} bars`;
+          ctx.font = 'bold 11px system-ui, sans-serif';
+          const tw = ctx.measureText(label).width + 12;
+          const lx = Math.max(R.x, Math.min(mx - tw / 2, R.x + R.w - tw));
+          const ly = Math.min(y0, y1) - 22;
+          ctx.fillStyle = up ? this.theme.up : this.theme.down;
+          this._roundRect(lx, ly, tw, 18, 4);
+          ctx.fill();
+          ctx.fillStyle = '#0e1320';
+          ctx.textAlign = 'left';
+          ctx.fillText(label, lx + 6, ly + 13);
+        } else if (d.type === 'text') {
+          const tx = X(d.a.t);
+          const ty = Y(d.a.price);
+          const label = d.text || 'Text';
+          ctx.font = '12px system-ui, sans-serif';
+          const tw = ctx.measureText(label).width + 12;
+          ctx.fillStyle = 'rgba(20,26,40,0.9)';
+          ctx.strokeStyle = col;
+          ctx.lineWidth = sel ? 1.6 : 1;
+          this._roundRect(tx, ty - 9, tw, 18, 4);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = col;
+          ctx.textAlign = 'left';
+          ctx.fillText(label, tx + 6, ty + 4);
+          if (sel) this._handle(tx, ty);
+        }
+      }
+    }
+
+    // ---- drawing hit-testing & geometry ------------------------------------
+    _distToSeg(px, py, x1, y1, x2, y2) {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len2 = dx * dx + dy * dy;
+      let t = len2 ? ((px - x1) * dx + (py - y1) * dy) / len2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      const cx = x1 + t * dx;
+      const cy = y1 + t * dy;
+      return Math.hypot(px - cx, py - cy);
+    }
+    /** Return the topmost drawing under the pixel, or null. */
+    _hitDrawing(px, py) {
+      const R = this._L ? this._L.price : null;
+      if (!R) return null;
+      const X = (t) => this._xOfT(t, R);
+      const Y = (p) => this._yOf(p);
+      const rightX = R.x + R.w;
+      const TOL = 7;
+      for (let k = this.drawings.length - 1; k >= 0; k--) {
+        const d = this.drawings[k];
+        if (d.type === 'trend' || d.type === 'arrow' || d.type === 'ray') {
+          const ax = X(d.a.t);
+          const ay = Y(d.a.price);
+          let bx = X(d.b.t);
+          let by = Y(d.b.price);
+          if (d.type === 'ray') {
+            const dx = bx - ax;
+            const dy = by - ay;
+            if (Math.abs(dx) > 0.001) {
+              const c = (rightX - ax) / dx;
+              if (c > 1) {
+                bx = ax + dx * c;
+                by = ay + dy * c;
+              }
+            }
+          }
+          if (this._distToSeg(px, py, ax, ay, bx, by) <= TOL) return d;
+        } else if (d.type === 'hline' || d.type === 'hray') {
+          const y = Y(d.a.price);
+          const x0 = d.type === 'hray' ? X(d.a.t) : R.x;
+          if (Math.abs(py - y) <= TOL && px >= x0 - 2 && px <= rightX) return d;
+        } else if (d.type === 'rect' || d.type === 'measure') {
+          const x0 = Math.min(X(d.a.t), X(d.b.t));
+          const x1 = Math.max(X(d.a.t), X(d.b.t));
+          const y0 = Math.min(Y(d.a.price), Y(d.b.price));
+          const y1 = Math.max(Y(d.a.price), Y(d.b.price));
+          if (px >= x0 - TOL && px <= x1 + TOL && py >= y0 - TOL && py <= y1 + TOL) return d;
+        } else if (d.type === 'fib') {
+          const hi = d.a.price;
+          const lo = d.b.price;
+          for (const r of [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]) {
+            if (Math.abs(py - Y(lo + r * (hi - lo))) <= TOL) return d;
+          }
+        } else if (d.type === 'text') {
+          const tx = X(d.a.t);
+          const ty = Y(d.a.price);
+          if (px >= tx - 4 && px <= tx + 80 && Math.abs(py - ty) <= 12) return d;
+        }
+      }
+      return null;
+    }
+    _twoPointTool(t) {
+      return t === 'trend' || t === 'ray' || t === 'rect' || t === 'fib' || t === 'arrow' || t === 'measure';
+    }
+
     _drawPriceAxis(L, scale, yOf) {
       const ctx = this.ctx;
       ctx.fillStyle = this.theme.text;
@@ -1256,15 +1648,46 @@
     // ---- events ------------------------------------------------------------
     _setupEvents() {
       const c = this.canvas;
-      let dragging = false;
+      let dragging = false; // panning
       let moved = false;
       let lastX = 0;
-      let downStart = 0;
 
       c.addEventListener('mousemove', (ev) => {
         const r = c.getBoundingClientRect();
         const px = ev.clientX - r.left;
         const py = ev.clientY - r.top;
+
+        // 1) drawing a new shape with an active tool
+        if (this._drawing && this.draft && this._L) {
+          const an = this._anchorAt(px, py);
+          if (this.draft.type === 'hline' || this.draft.type === 'hray') this.draft.a.price = an.price;
+          else this.draft.b = an;
+          moved = true;
+          this.hover = { index: this._iOf(px, this._L.price), x: px, y: py };
+          this.requestRender();
+          return;
+        }
+        // 2) moving an already-selected drawing
+        if (this._dragDraw && this._L) {
+          const an = this._anchorAt(px, py);
+          const dt = an.t - this._dragDraw.lastT;
+          const dp = an.price - this._dragDraw.lastPrice;
+          const d = this.drawings.find((x) => x.id === this._dragDraw.id);
+          if (d) {
+            d.a.t += dt;
+            d.a.price += dp;
+            if (d.b) {
+              d.b.t += dt;
+              d.b.price += dp;
+            }
+          }
+          this._dragDraw.lastT = an.t;
+          this._dragDraw.lastPrice = an.price;
+          moved = true;
+          this.requestRender();
+          return;
+        }
+        // 3) panning
         if (dragging) {
           const dxPix = px - lastX;
           const step = this._step(this._L ? this._L.price : { w: this.cssW });
@@ -1277,6 +1700,9 @@
             lastX = px;
             moved = true;
           }
+        } else if (!this.tool && !this.clickMode) {
+          // hover feedback: 'move' cursor when over a selectable drawing
+          c.style.cursor = this._hitDrawing(px, py) ? 'move' : 'default';
         }
         const idx = this._L ? this._iOf(px, this._L.price) : 0;
         this.hover = { index: idx, x: px, y: py };
@@ -1290,13 +1716,88 @@
       });
       c.addEventListener('mousedown', (ev) => {
         const r = c.getBoundingClientRect();
-        lastX = ev.clientX - r.left;
-        downStart = lastX;
-        dragging = !this.clickMode;
+        const px = ev.clientX - r.left;
+        const py = ev.clientY - r.top;
+        lastX = px;
         moved = false;
-        if (!this.clickMode) c.style.cursor = 'grabbing';
+        dragging = false;
+
+        if (this.clickMode) return; // lesson exercise click-to-mark
+
+        // start a new drawing with the active tool
+        if (this.tool && this._L) {
+          const an = this._anchorAt(px, py);
+          const id = ++this._drawSeq;
+          if (this.tool === 'text') {
+            this.draft = { id, type: 'text', a: an, color: '#e8edf6' };
+          } else if (this.tool === 'hline' || this.tool === 'hray') {
+            this.draft = { id, type: this.tool, a: an, color: '#5b8cff' };
+          } else {
+            const color =
+              this.tool === 'arrow' ? '#ffd166' : this.tool === 'measure' ? '#9aa6bf' : '#5b8cff';
+            this.draft = { id, type: this.tool, a: an, b: { t: an.t, price: an.price }, color };
+          }
+          this._drawing = true;
+          this.requestRender();
+          return;
+        }
+
+        // cursor mode: grab a drawing under the pointer, else pan
+        if (this._L) {
+          const hit = this._hitDrawing(px, py);
+          if (hit) {
+            this.selected = hit.id;
+            const an = this._anchorAt(px, py);
+            this._dragDraw = { id: hit.id, lastT: an.t, lastPrice: an.price };
+            c.style.cursor = 'grabbing';
+            this.requestRender();
+            return;
+          }
+          this.selected = null;
+        }
+        dragging = true;
+        c.style.cursor = 'grabbing';
+        this.requestRender();
       });
       window.addEventListener('mouseup', (ev) => {
+        // finish a new drawing
+        if (this._drawing && this.draft) {
+          this._drawing = false;
+          const d = this.draft;
+          this.draft = null;
+          const commit = () => {
+            d.id = d.id || ++this._drawSeq;
+            this.drawings.push(d);
+            this.selected = d.id;
+            this._emit('drawingschange', this.drawings);
+          };
+          if (d.type === 'text') {
+            const txt = (window.prompt('Text label:') || '').trim();
+            if (txt) {
+              d.text = txt;
+              commit();
+            }
+          } else if (this._twoPointTool(d.type)) {
+            const adx = Math.abs(this._xOfT(d.a.t, this._L.price) - this._xOfT(d.b.t, this._L.price));
+            const ady = Math.abs(this._yOf(d.a.price) - this._yOf(d.b.price));
+            if (adx + ady > 4) commit(); // ignore an accidental click with no drag
+          } else {
+            commit(); // hline / hray: a single click places it
+          }
+          this.tool = null; // return to the cursor after drawing (TradingView default)
+          c.style.cursor = 'default';
+          this._emit('toolend', null);
+          this.requestRender();
+          return;
+        }
+        // finish moving a drawing
+        if (this._dragDraw) {
+          this._dragDraw = null;
+          c.style.cursor = 'default';
+          this._emit('drawingschange', this.drawings);
+          this.requestRender();
+          return;
+        }
         if (!dragging && !this.clickMode) return;
         const wasDrag = moved;
         dragging = false;
@@ -1310,6 +1811,23 @@
             const price = this._priceOf(py);
             this._emit('click', { index: idx, price, x: px, y: py });
           }
+        }
+      });
+      window.addEventListener('keydown', (ev) => {
+        const ae = document.activeElement;
+        const inField = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
+        if (ev.key === 'Escape') {
+          if (this._drawing || this.draft || this.tool) {
+            this._drawing = false;
+            this.draft = null;
+            this.tool = null;
+            c.style.cursor = 'default';
+            this._emit('toolend', null);
+            this.requestRender();
+          }
+        } else if ((ev.key === 'Delete' || ev.key === 'Backspace') && this.selected != null && !inField) {
+          ev.preventDefault();
+          this.deleteSelected();
         }
       });
       c.addEventListener(

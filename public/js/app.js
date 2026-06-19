@@ -52,6 +52,28 @@
     } catch (_) {}
   }
 
+  // Manual drawings persist per ticker (anchored by timestamp, so they survive
+  // timeframe changes and live updates).
+  const DRAW_KEY = 'chartSchool.draw.v1';
+  function loadDrawingStore() {
+    try {
+      return JSON.parse(localStorage.getItem(DRAW_KEY) || '{}');
+    } catch (_) {
+      return {};
+    }
+  }
+  function drawingsFor(sym) {
+    return loadDrawingStore()[sym] || [];
+  }
+  function saveDrawingsFor(sym, arr) {
+    const store = loadDrawingStore();
+    if (arr && arr.length) store[sym] = arr;
+    else delete store[sym];
+    try {
+      localStorage.setItem(DRAW_KEY, JSON.stringify(store));
+    } catch (_) {}
+  }
+
   // ---- data ----------------------------------------------------------------
   function renderCurrentView() {
     if (state.view === 'lessons') renderStep();
@@ -79,6 +101,7 @@
       });
       state.data = data;
       chart.setData(data);
+      chart.loadDrawings(drawingsFor(state.symbol));
       renderHeader();
       markUpdated(data);
       // Always show the EMA/SMA suite on the trading chart (lessons set their own).
@@ -1246,9 +1269,55 @@
         loadSymbol(state.symbol);
       });
 
+    bindDrawTools();
+    bindSidebar();
+
     // error overlay actions
     $('#errRetry').addEventListener('click', () => loadSymbol(state.symbol));
     $('#errSample').addEventListener('click', useSampleData);
+  }
+
+  // Wire the left drawing rail to the chart's drawing engine.
+  function bindDrawTools() {
+    const rail = $('.draw-rail');
+    if (!rail || !chart) return;
+    const toolBtns = rail.querySelectorAll('.dr-btn[data-tool]');
+    const setActive = (btn) => toolBtns.forEach((b) => b.classList.toggle('active', b === btn));
+    toolBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        chart.setTool(btn.dataset.tool);
+        setActive(btn);
+      });
+    });
+    const magnetBtn = rail.querySelector('[data-action="magnet"]');
+    magnetBtn.addEventListener('click', () => {
+      const on = !magnetBtn.classList.contains('on');
+      magnetBtn.classList.toggle('on', on);
+      chart.setMagnet(on);
+      toast(on ? '🧲 Magnet on — anchors snap to OHLC' : 'Magnet off');
+    });
+    rail.querySelector('[data-action="undo"]').addEventListener('click', () => chart.undoDrawing());
+    rail.querySelector('[data-action="clear"]').addEventListener('click', () => {
+      if (chart.getDrawings().length && confirm('Remove all drawings on this chart?')) chart.clearDrawings();
+    });
+    // after a shape is finished the chart reverts to the cursor — reflect that
+    chart.on('toolend', () => setActive(rail.querySelector('[data-tool="cursor"]')));
+    // persist drawings per ticker whenever they change
+    chart.on('drawingschange', (arr) => saveDrawingsFor(state.symbol, arr));
+  }
+
+  // Collapse the analysis panel for a full-width, TradingView-style chart.
+  function bindSidebar() {
+    const layout = $('.layout');
+    const reopen = $('#sidebarReopen');
+    const toggle = $('#sidebarToggle');
+    if (!layout || !reopen || !toggle) return;
+    const setCollapsed = (on) => {
+      layout.classList.toggle('sb-collapsed', on);
+      reopen.style.display = on ? 'block' : 'none';
+    };
+    toggle.addEventListener('click', () => setCollapsed(true));
+    reopen.addEventListener('click', () => setCollapsed(false));
   }
 
   // ---- boot ----------------------------------------------------------------

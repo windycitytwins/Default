@@ -101,13 +101,72 @@ body {
   display: grid;
   grid-template-columns: 1fr 400px;
   min-height: 0;
+  position: relative;
 }
+.layout.sb-collapsed { grid-template-columns: 1fr 0; }
+.layout.sb-collapsed .tutor-pane { display: none; }
+.tab-collapse { margin-left: auto; font-weight: 700; }
+.sidebar-reopen {
+  position: absolute;
+  top: 12px;
+  right: 0;
+  z-index: 6;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-right: none;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 10px;
+  border-radius: 8px 0 0 8px;
+  cursor: pointer;
+}
+.sidebar-reopen:hover { border-color: var(--accent); color: var(--accent); }
 .chart-pane {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   min-width: 0;
   border-right: 1px solid var(--border);
 }
+.chart-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* left drawing-tool rail (TradingView-style) */
+.draw-rail {
+  width: 42px;
+  flex: 0 0 42px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+.dr-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.dr-btn svg { width: 19px; height: 19px; display: block; }
+.dr-btn:hover { background: rgba(120, 150, 230, 0.14); color: var(--text); }
+.dr-btn.active { background: rgba(91, 140, 255, 0.18); color: var(--accent); border-color: rgba(91, 140, 255, 0.5); }
+.dr-toggle.on { background: rgba(255, 209, 102, 0.18); color: #ffd166; border-color: rgba(255, 209, 102, 0.5); }
+.dr-sep { width: 22px; height: 1px; background: var(--border); margin: 5px 0; }
 /* timeframe ribbon (TradingView-style interval buttons) */
 .tf-ribbon {
   display: flex;
