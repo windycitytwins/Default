@@ -82,55 +82,62 @@
   };
 
   /**
-   * Cluster swing pivots into horizontal support/resistance ZONES.
-   * Returns levels sorted by "strength" (number of touches), each with a
-   * price band [lo, hi] and the candle indices that touched it.
+   * Cluster swing pivots into horizontal support/resistance ZONES, scored the
+   * way a trader weighs them: more touches, more recent, held over a longer
+   * span and nearer the current price all count for more. Each level carries a
+   * tight price band [lo, hi], a midpoint, touch count, the first/last touch
+   * index and its role relative to the latest close.
    */
   TA.supportResistance = function (candles, opts = {}) {
-    const lookback = opts.lookback || 5;
+    const lookback = opts.lookback || 8;
     const maxLevels = opts.maxLevels || 6;
+    const tol = opts.tolerance || 0.01; // merge pivots within ~1%
+    const minTouches = opts.minTouches || 2;
+    const n = candles.length;
+    if (n < lookback * 2 + 2) return [];
     const { highs, lows } = TA.pivots(candles, lookback);
-    const pts = highs
-      .map((p) => ({ ...p, kind: 'res' }))
-      .concat(lows.map((p) => ({ ...p, kind: 'sup' })))
-      .sort((a, b) => a.price - b.price);
+    const pts = highs.concat(lows).sort((a, b) => a.price - b.price);
     if (!pts.length) return [];
 
-    // Tolerance scales with price (1.2% band by default).
-    const tol = opts.tolerance || 0.012;
+    // Sequential clustering against the running centroid (points are sorted).
     const clusters = [];
-    let cur = [pts[0]];
-    for (let i = 1; i < pts.length; i++) {
-      const ref = cur[cur.length - 1].price;
-      if (Math.abs(pts[i].price - ref) / ref <= tol) {
-        cur.push(pts[i]);
+    let cur = null;
+    for (const p of pts) {
+      if (cur && Math.abs(p.price - cur.centroid) / cur.centroid <= tol) {
+        cur.pts.push(p);
+        cur.sum += p.price;
+        cur.centroid = cur.sum / cur.pts.length;
       } else {
+        cur = { pts: [p], sum: p.price, centroid: p.price };
         clusters.push(cur);
-        cur = [pts[i]];
       }
     }
-    clusters.push(cur);
 
-    const lastClose = candles[candles.length - 1].close;
+    const lastClose = candles[n - 1].close;
     const levels = clusters
       .map((cl) => {
-        const prices = cl.map((p) => p.price);
-        const lo = Math.min(...prices);
-        const hi = Math.max(...prices);
-        const mid = prices.reduce((a, b) => a + b, 0) / prices.length;
+        const prices = cl.pts.map((p) => p.price);
+        const idxs = cl.pts.map((p) => p.i);
+        const lo = Math.min.apply(null, prices);
+        const hi = Math.max.apply(null, prices);
+        const mid = cl.centroid;
+        const touches = cl.pts.length;
+        const lastTouch = Math.max.apply(null, idxs);
+        const firstTouch = Math.min.apply(null, idxs);
+        const recency = lastTouch / n; // 0..1
+        const span = (lastTouch - firstTouch) / n; // held over time
+        const dist = Math.abs(mid - lastClose) / lastClose;
+        const proximity = 1 / (1 + dist * 1.6); // nearer = stronger
+        const score = touches * (1 + recency * 0.7 + span * 0.4) * proximity;
         return {
-          lo,
-          hi,
-          mid,
-          touches: cl.length,
-          indices: cl.map((p) => p.i),
-          // Below the current price it acts as support, above as resistance.
-          role: mid < lastClose ? 'support' : 'resistance'
+          lo, hi, mid, touches, firstIndex: firstTouch, lastIndex: lastTouch,
+          role: mid < lastClose ? 'support' : 'resistance', score
         };
       })
-      .filter((lvl) => lvl.touches >= (opts.minTouches || 2))
-      .sort((a, b) => b.touches - a.touches)
-      .slice(0, maxLevels);
+      .filter((l) => l.touches >= minTouches)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxLevels)
+      .sort((a, b) => b.mid - a.mid);
 
     return levels;
   };

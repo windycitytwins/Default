@@ -1298,55 +1298,62 @@ body {
   };
 
   /**
-   * Cluster swing pivots into horizontal support/resistance ZONES.
-   * Returns levels sorted by "strength" (number of touches), each with a
-   * price band [lo, hi] and the candle indices that touched it.
+   * Cluster swing pivots into horizontal support/resistance ZONES, scored the
+   * way a trader weighs them: more touches, more recent, held over a longer
+   * span and nearer the current price all count for more. Each level carries a
+   * tight price band [lo, hi], a midpoint, touch count, the first/last touch
+   * index and its role relative to the latest close.
    */
   TA.supportResistance = function (candles, opts = {}) {
-    const lookback = opts.lookback || 5;
+    const lookback = opts.lookback || 8;
     const maxLevels = opts.maxLevels || 6;
+    const tol = opts.tolerance || 0.01; // merge pivots within ~1%
+    const minTouches = opts.minTouches || 2;
+    const n = candles.length;
+    if (n < lookback * 2 + 2) return [];
     const { highs, lows } = TA.pivots(candles, lookback);
-    const pts = highs
-      .map((p) => ({ ...p, kind: 'res' }))
-      .concat(lows.map((p) => ({ ...p, kind: 'sup' })))
-      .sort((a, b) => a.price - b.price);
+    const pts = highs.concat(lows).sort((a, b) => a.price - b.price);
     if (!pts.length) return [];
 
-    // Tolerance scales with price (1.2% band by default).
-    const tol = opts.tolerance || 0.012;
+    // Sequential clustering against the running centroid (points are sorted).
     const clusters = [];
-    let cur = [pts[0]];
-    for (let i = 1; i < pts.length; i++) {
-      const ref = cur[cur.length - 1].price;
-      if (Math.abs(pts[i].price - ref) / ref <= tol) {
-        cur.push(pts[i]);
+    let cur = null;
+    for (const p of pts) {
+      if (cur && Math.abs(p.price - cur.centroid) / cur.centroid <= tol) {
+        cur.pts.push(p);
+        cur.sum += p.price;
+        cur.centroid = cur.sum / cur.pts.length;
       } else {
+        cur = { pts: [p], sum: p.price, centroid: p.price };
         clusters.push(cur);
-        cur = [pts[i]];
       }
     }
-    clusters.push(cur);
 
-    const lastClose = candles[candles.length - 1].close;
+    const lastClose = candles[n - 1].close;
     const levels = clusters
       .map((cl) => {
-        const prices = cl.map((p) => p.price);
-        const lo = Math.min(...prices);
-        const hi = Math.max(...prices);
-        const mid = prices.reduce((a, b) => a + b, 0) / prices.length;
+        const prices = cl.pts.map((p) => p.price);
+        const idxs = cl.pts.map((p) => p.i);
+        const lo = Math.min.apply(null, prices);
+        const hi = Math.max.apply(null, prices);
+        const mid = cl.centroid;
+        const touches = cl.pts.length;
+        const lastTouch = Math.max.apply(null, idxs);
+        const firstTouch = Math.min.apply(null, idxs);
+        const recency = lastTouch / n; // 0..1
+        const span = (lastTouch - firstTouch) / n; // held over time
+        const dist = Math.abs(mid - lastClose) / lastClose;
+        const proximity = 1 / (1 + dist * 1.6); // nearer = stronger
+        const score = touches * (1 + recency * 0.7 + span * 0.4) * proximity;
         return {
-          lo,
-          hi,
-          mid,
-          touches: cl.length,
-          indices: cl.map((p) => p.i),
-          // Below the current price it acts as support, above as resistance.
-          role: mid < lastClose ? 'support' : 'resistance'
+          lo, hi, mid, touches, firstIndex: firstTouch, lastIndex: lastTouch,
+          role: mid < lastClose ? 'support' : 'resistance', score
         };
       })
-      .filter((lvl) => lvl.touches >= (opts.minTouches || 2))
-      .sort((a, b) => b.touches - a.touches)
-      .slice(0, maxLevels);
+      .filter((l) => l.touches >= minTouches)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxLevels)
+      .sort((a, b) => b.mid - a.mid);
 
     return levels;
   };
@@ -2392,7 +2399,6 @@ body {
       this._yOf = yOf;
 
       this._drawGrid(L, scale, yOf);
-      this._drawZones(L, yOf);
       this._drawHighlights(L);
       this._drawEmaBands(L, yOf);
       this._drawBands(L, yOf);
@@ -2407,6 +2413,7 @@ body {
       if (this.flags.macd && L.macd) this._drawMACD(L.macd);
       this._drawMarkers(L, yOf);
       this._drawAnnotations(L, yOf);
+      this._drawZones(L, yOf);
       this._drawDrawings(L, yOf);
       this._drawPriceAxis(L, scale, yOf);
       this._drawAxisTags(L, yOf);
@@ -2528,12 +2535,24 @@ body {
       const ctx = this.ctx;
       ctx.strokeStyle = this.theme.grid;
       ctx.lineWidth = 1;
-      const ticks = this._priceTicks(scale, 6);
+      const bottom = L.price.y + L.price.h + (L.vol ? L.vol.h + 8 : 0) + (L.rsi ? L.rsi.h + 8 : 0) + (L.macd ? L.macd.h + 8 : 0);
       ctx.beginPath();
-      for (const t of ticks) {
+      // horizontal (price) lines
+      for (const t of this._priceTicks(scale, 6)) {
         const y = Math.round(yOf(t)) + 0.5;
         ctx.moveTo(L.price.x, y);
         ctx.lineTo(L.price.x + L.price.w, y);
+      }
+      // vertical (time) lines, aligned to the date-axis ticks
+      const { s, e } = this._visible();
+      let lastX = -Infinity;
+      for (let i = s; i < e; i++) {
+        const x = this._xOf(i, L.price);
+        if (x - lastX < 70) continue;
+        const gx = Math.round(x) + 0.5;
+        ctx.moveTo(gx, L.price.y);
+        ctx.lineTo(gx, bottom);
+        lastX = x;
       }
       ctx.stroke();
     }
@@ -2569,19 +2588,58 @@ body {
 
     _drawZones(L, yOf) {
       const ctx = this.ctx;
+      const right = L.price.x + L.price.w;
+      const pills = []; // collect S/R price labels for collision-avoided drawing
       for (const [, z] of this.zones) {
-        const yHi = yOf(z.hi);
-        const yLo = yOf(z.lo);
-        const top = Math.min(yHi, yLo);
-        const h = Math.max(2, Math.abs(yLo - yHi));
-        ctx.fillStyle = z.color || 'rgba(120,160,255,0.16)';
+        const res = z.role === 'resistance';
+        const sr = z.sr; // styled like a TradingView support/resistance zone
+        let yHi = yOf(z.hi);
+        let yLo = yOf(z.lo);
+        let top = Math.min(yHi, yLo);
+        let h = Math.abs(yLo - yHi);
+        if (sr && h < 7) {
+          top -= (7 - h) / 2;
+          h = 7;
+        } else if (h < 2) h = 2;
+        if (top + h < L.price.y || top > L.price.y + L.price.h) continue;
+        const fill = z.color || (sr ? (res ? 'rgba(224,86,106,0.10)' : 'rgba(38,161,123,0.10)') : 'rgba(120,160,255,0.16)');
+        const line = z.lineColor || (sr ? (res ? 'rgba(224,86,106,0.55)' : 'rgba(38,161,123,0.55)') : null);
+        ctx.fillStyle = fill;
         ctx.fillRect(L.price.x, top, L.price.w, h);
-        if (z.label) {
+        if (line) {
+          ctx.strokeStyle = line;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(L.price.x, Math.round(top) + 0.5);
+          ctx.lineTo(right, Math.round(top) + 0.5);
+          ctx.moveTo(L.price.x, Math.round(top + h) + 0.5);
+          ctx.lineTo(right, Math.round(top + h) + 0.5);
+          ctx.stroke();
+        }
+        if (sr) {
+          pills.push({ y: top + h / 2, res, mid: z.mid != null ? z.mid : (z.hi + z.lo) / 2, touches: z.touches });
+        } else if (z.label) {
           ctx.fillStyle = z.labelColor || 'rgba(200,220,255,0.9)';
           ctx.font = '11px system-ui, sans-serif';
           ctx.textAlign = 'left';
           ctx.fillText(z.label, L.price.x + 8, top + 13);
         }
+      }
+      // right-edge price pills for S/R zones (inside the chart, left of the axis)
+      if (!pills.length) return;
+      pills.sort((a, b) => a.y - b.y);
+      for (let k = 1; k < pills.length; k++) if (pills[k].y - pills[k - 1].y < 16) pills[k].y = pills[k - 1].y + 16;
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      for (const p of pills) {
+        const tag = fmtPrice(p.mid) + (p.touches ? '  ' + p.touches + '×' : '');
+        const tw = ctx.measureText(tag).width + 12;
+        const px = right - tw - 3;
+        ctx.fillStyle = p.res ? 'rgba(224,86,106,0.92)' : 'rgba(38,161,123,0.92)';
+        this._roundRect(px, p.y - 8, tw, 16, 4);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillText(tag, px + 6, p.y + 3);
       }
     }
 
@@ -5956,15 +6014,9 @@ body {
     }
     if (ex.vwap) chart.setOverlay('vwap', { data: ta.vwap(candles), color: '#ffd166', label: 'VWAP', width: 1.6 });
     if (ex.sr) {
-      const levels = window.TA.supportResistance(state.data.candles, { lookback: 5, maxLevels: 6, minTouches: 2 });
+      const levels = window.TA.supportResistance(state.data.candles, { lookback: 8, maxLevels: 6, minTouches: 2 });
       levels.forEach((lvl, k) => {
-        const isSup = lvl.role === 'support';
-        chart.setZone('sr' + k, {
-          lo: lvl.lo, hi: lvl.hi,
-          color: isSup ? 'rgba(38,161,123,0.16)' : 'rgba(224,86,106,0.16)',
-          label: `${isSup ? 'Support' : 'Resistance'} · ${lvl.touches}×`,
-          labelColor: isSup ? 'rgba(120,230,190,.95)' : 'rgba(255,160,170,.95)'
-        });
+        chart.setZone('sr' + k, { lo: lvl.lo, hi: lvl.hi, mid: lvl.mid, role: lvl.role, touches: lvl.touches, sr: true });
       });
     }
     // Auto Fibonacci retracement on the DOMINANT swing — the extreme high and

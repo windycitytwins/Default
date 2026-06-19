@@ -524,15 +524,9 @@
     }
     if (ex.vwap) chart.setOverlay('vwap', { data: ta.vwap(candles), color: '#ffd166', label: 'VWAP', width: 1.6 });
     if (ex.sr) {
-      const levels = window.TA.supportResistance(state.data.candles, { lookback: 5, maxLevels: 6, minTouches: 2 });
+      const levels = window.TA.supportResistance(state.data.candles, { lookback: 8, maxLevels: 6, minTouches: 2 });
       levels.forEach((lvl, k) => {
-        const isSup = lvl.role === 'support';
-        chart.setZone('sr' + k, {
-          lo: lvl.lo, hi: lvl.hi,
-          color: isSup ? 'rgba(38,161,123,0.16)' : 'rgba(224,86,106,0.16)',
-          label: `${isSup ? 'Support' : 'Resistance'} · ${lvl.touches}×`,
-          labelColor: isSup ? 'rgba(120,230,190,.95)' : 'rgba(255,160,170,.95)'
-        });
+        chart.setZone('sr' + k, { lo: lvl.lo, hi: lvl.hi, mid: lvl.mid, role: lvl.role, touches: lvl.touches, sr: true });
       });
     }
     // Auto Fibonacci retracement on the DOMINANT swing — the extreme high and

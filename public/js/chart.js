@@ -546,7 +546,6 @@
       this._yOf = yOf;
 
       this._drawGrid(L, scale, yOf);
-      this._drawZones(L, yOf);
       this._drawHighlights(L);
       this._drawEmaBands(L, yOf);
       this._drawBands(L, yOf);
@@ -561,6 +560,7 @@
       if (this.flags.macd && L.macd) this._drawMACD(L.macd);
       this._drawMarkers(L, yOf);
       this._drawAnnotations(L, yOf);
+      this._drawZones(L, yOf);
       this._drawDrawings(L, yOf);
       this._drawPriceAxis(L, scale, yOf);
       this._drawAxisTags(L, yOf);
@@ -682,12 +682,24 @@
       const ctx = this.ctx;
       ctx.strokeStyle = this.theme.grid;
       ctx.lineWidth = 1;
-      const ticks = this._priceTicks(scale, 6);
+      const bottom = L.price.y + L.price.h + (L.vol ? L.vol.h + 8 : 0) + (L.rsi ? L.rsi.h + 8 : 0) + (L.macd ? L.macd.h + 8 : 0);
       ctx.beginPath();
-      for (const t of ticks) {
+      // horizontal (price) lines
+      for (const t of this._priceTicks(scale, 6)) {
         const y = Math.round(yOf(t)) + 0.5;
         ctx.moveTo(L.price.x, y);
         ctx.lineTo(L.price.x + L.price.w, y);
+      }
+      // vertical (time) lines, aligned to the date-axis ticks
+      const { s, e } = this._visible();
+      let lastX = -Infinity;
+      for (let i = s; i < e; i++) {
+        const x = this._xOf(i, L.price);
+        if (x - lastX < 70) continue;
+        const gx = Math.round(x) + 0.5;
+        ctx.moveTo(gx, L.price.y);
+        ctx.lineTo(gx, bottom);
+        lastX = x;
       }
       ctx.stroke();
     }
@@ -723,19 +735,58 @@
 
     _drawZones(L, yOf) {
       const ctx = this.ctx;
+      const right = L.price.x + L.price.w;
+      const pills = []; // collect S/R price labels for collision-avoided drawing
       for (const [, z] of this.zones) {
-        const yHi = yOf(z.hi);
-        const yLo = yOf(z.lo);
-        const top = Math.min(yHi, yLo);
-        const h = Math.max(2, Math.abs(yLo - yHi));
-        ctx.fillStyle = z.color || 'rgba(120,160,255,0.16)';
+        const res = z.role === 'resistance';
+        const sr = z.sr; // styled like a TradingView support/resistance zone
+        let yHi = yOf(z.hi);
+        let yLo = yOf(z.lo);
+        let top = Math.min(yHi, yLo);
+        let h = Math.abs(yLo - yHi);
+        if (sr && h < 7) {
+          top -= (7 - h) / 2;
+          h = 7;
+        } else if (h < 2) h = 2;
+        if (top + h < L.price.y || top > L.price.y + L.price.h) continue;
+        const fill = z.color || (sr ? (res ? 'rgba(224,86,106,0.10)' : 'rgba(38,161,123,0.10)') : 'rgba(120,160,255,0.16)');
+        const line = z.lineColor || (sr ? (res ? 'rgba(224,86,106,0.55)' : 'rgba(38,161,123,0.55)') : null);
+        ctx.fillStyle = fill;
         ctx.fillRect(L.price.x, top, L.price.w, h);
-        if (z.label) {
+        if (line) {
+          ctx.strokeStyle = line;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(L.price.x, Math.round(top) + 0.5);
+          ctx.lineTo(right, Math.round(top) + 0.5);
+          ctx.moveTo(L.price.x, Math.round(top + h) + 0.5);
+          ctx.lineTo(right, Math.round(top + h) + 0.5);
+          ctx.stroke();
+        }
+        if (sr) {
+          pills.push({ y: top + h / 2, res, mid: z.mid != null ? z.mid : (z.hi + z.lo) / 2, touches: z.touches });
+        } else if (z.label) {
           ctx.fillStyle = z.labelColor || 'rgba(200,220,255,0.9)';
           ctx.font = '11px system-ui, sans-serif';
           ctx.textAlign = 'left';
           ctx.fillText(z.label, L.price.x + 8, top + 13);
         }
+      }
+      // right-edge price pills for S/R zones (inside the chart, left of the axis)
+      if (!pills.length) return;
+      pills.sort((a, b) => a.y - b.y);
+      for (let k = 1; k < pills.length; k++) if (pills[k].y - pills[k - 1].y < 16) pills[k].y = pills[k - 1].y + 16;
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      for (const p of pills) {
+        const tag = fmtPrice(p.mid) + (p.touches ? '  ' + p.touches + '×' : '');
+        const tw = ctx.measureText(tag).width + 12;
+        const px = right - tw - 3;
+        ctx.fillStyle = p.res ? 'rgba(224,86,106,0.92)' : 'rgba(38,161,123,0.92)';
+        this._roundRect(px, p.y - 8, tw, 16, 4);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillText(tag, px + 6, p.y + 3);
       }
     }
 
