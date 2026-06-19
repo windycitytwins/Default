@@ -300,7 +300,23 @@
         <p class="ctrl-note">Full-market heat map: <a href="https://finviz.com/map.ashx" target="_blank" rel="noopener">finviz.com/map</a></p>
       </div>
     </aside>
+
+    <aside class="wl-pane" id="wlPane">
+      <div class="wl-head">
+        <span class="wl-title">★ Watchlist</span>
+        <button id="wlRefresh" class="wl-icon-btn" title="Refresh quotes" aria-label="Refresh quotes">↻</button>
+        <button id="wlCollapse" class="wl-icon-btn" title="Hide watchlist" aria-label="Hide watchlist">⟩</button>
+      </div>
+      <div class="wl-add2">
+        <input id="wlRailInput" type="text" maxlength="12" placeholder="+ Add symbol" spellcheck="false" aria-label="Add symbol to watchlist" />
+      </div>
+      <div class="wl-cols"><span>Symbol</span><span>Last</span><span>Chg%</span></div>
+      <div id="wlRailList" class="wl-list"></div>
+      <p class="wl-note">Click a row to load it. Live quotes refresh automatically.</p>
+    </aside>
+
     <button id="sidebarReopen" class="sidebar-reopen" title="Open the analysis panel" aria-label="Open panel" style="display:none">‹ Panel</button>
+    <button id="wlReopen" class="wl-reopen" title="Open the watchlist" aria-label="Open watchlist" style="display:none">★</button>
   </main>
 
   <div id="toast" class="toast"></div>

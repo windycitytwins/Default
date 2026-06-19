@@ -104,6 +104,7 @@
       chart.loadDrawings(drawingsFor(state.symbol));
       renderHeader();
       markUpdated(data);
+      updateWatchActive();
       // Always show the EMA/SMA suite on the trading chart (lessons set their own).
       if (state.view !== 'lessons') applyExplore(true);
       renderCurrentView();
@@ -121,6 +122,7 @@
     chart.setData(data);
     renderHeader();
     markUpdated(data);
+    updateWatchActive();
     if (state.view !== 'lessons') applyExplore(true);
     renderCurrentView();
   }
@@ -630,9 +632,7 @@
       const chip = el('span', 'wl-chip', `${sym}<button class="wl-x" data-sym="${sym}" aria-label="remove">×</button>`);
       chip.querySelector('.wl-x').addEventListener('click', (e) => {
         e.stopPropagation();
-        state.watchlist = state.watchlist.filter((s) => s !== sym);
-        renderWatchlist();
-        save();
+        removeWatch(sym);
       });
       chip.addEventListener('click', () => loadSymbol(sym));
       box.appendChild(chip);
@@ -640,11 +640,75 @@
   }
   function addWatch(sym) {
     sym = (sym || '').toUpperCase().trim().slice(0, 12);
+    const ri = $('#wlRailInput');
+    const si = $('#wlInput');
+    if (ri) ri.value = '';
+    if (si) si.value = '';
     if (!sym || state.watchlist.includes(sym)) return;
     state.watchlist.push(sym);
-    $('#wlInput').value = '';
     renderWatchlist();
+    renderWatchRail();
     save();
+    if (location.protocol !== 'file:')
+      window.MarketData
+        .quote(sym)
+        .then((q) => {
+          if (q && isFinite(q.price)) {
+            _wlQuotes[sym] = q;
+            renderWatchRail();
+          }
+        })
+        .catch(() => {});
+  }
+  function removeWatch(sym) {
+    state.watchlist = state.watchlist.filter((s) => s !== sym);
+    renderWatchlist();
+    renderWatchRail();
+    save();
+  }
+
+  // ---- right-edge watchlist rail (live quotes) -----------------------------
+  const _wlQuotes = {}; // sym -> { price, changePct }
+  function renderWatchRail() {
+    const list = $('#wlRailList');
+    if (!list) return;
+    list.innerHTML = '';
+    state.watchlist.forEach((sym) => {
+      const q = _wlQuotes[sym];
+      const chg = q && isFinite(q.changePct) ? q.changePct : null;
+      const cls = chg == null ? 'flat' : chg >= 0 ? 'pos' : 'neg';
+      const last = q && isFinite(q.price) ? q.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+      const chgTxt = chg == null ? '—' : `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`;
+      const row = el('div', 'wl-row' + (sym === state.symbol ? ' active' : ''));
+      row.dataset.sym = sym;
+      row.innerHTML = `<span class="wl-sym">${sym}</span><span class="wl-last">${last}</span><span class="wl-chg ${cls}">${chgTxt}</span><button class="wl-row-x" title="remove" aria-label="remove">×</button>`;
+      row.addEventListener('click', () => loadSymbol(sym));
+      row.querySelector('.wl-row-x').addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeWatch(sym);
+      });
+      list.appendChild(row);
+    });
+  }
+  function updateWatchActive() {
+    document.querySelectorAll('#wlRailList .wl-row').forEach((r) => r.classList.toggle('active', r.dataset.sym === state.symbol));
+  }
+  let _wlRefreshing = false;
+  async function refreshWatchQuotes() {
+    if (_wlRefreshing || location.protocol === 'file:' || !state.watchlist.length) return;
+    _wlRefreshing = true;
+    try {
+      await mapPool(state.watchlist.slice(), 4, async (sym) => {
+        try {
+          const q = await window.MarketData.quote(sym);
+          if (q && isFinite(q.price)) _wlQuotes[sym] = q;
+        } catch (_) {}
+        return null;
+      });
+      renderWatchRail();
+    } finally {
+      _wlRefreshing = false;
+    }
   }
   // concurrency-limited async map
   async function mapPool(items, limit, fn, onProgress) {
@@ -1271,6 +1335,7 @@
 
     bindDrawTools();
     bindSidebar();
+    bindWatchRail();
 
     // error overlay actions
     $('#errRetry').addEventListener('click', () => loadSymbol(state.symbol));
@@ -1320,6 +1385,24 @@
     reopen.addEventListener('click', () => setCollapsed(false));
   }
 
+  // Wire the right-edge watchlist (add, refresh, collapse) + initial render.
+  function bindWatchRail() {
+    const layout = $('.layout');
+    const reopen = $('#wlReopen');
+    if (!layout || !reopen || !$('#wlPane')) return;
+    $('#wlRailInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') addWatch(e.target.value);
+    });
+    $('#wlRefresh').addEventListener('click', refreshWatchQuotes);
+    const setCollapsed = (on) => {
+      layout.classList.toggle('wl-collapsed', on);
+      reopen.style.display = on ? 'block' : 'none';
+    };
+    $('#wlCollapse').addEventListener('click', () => setCollapsed(true));
+    reopen.addEventListener('click', () => setCollapsed(false));
+    renderWatchRail();
+  }
+
   // ---- boot ----------------------------------------------------------------
   async function boot() {
     restore();
@@ -1334,11 +1417,16 @@
     });
 
     await loadSymbol(state.symbol); // also renders the current view (lessons/explore/signals)
+    refreshWatchQuotes();
 
     // live auto-refresh every ~18s (gentle; server also caches): intraday views
     // re-fetch the full chart, daily views just refresh the live quote price.
     const tick = () => (/(m|h)$/.test(state.interval) ? refreshLive() : refreshQuote());
     setInterval(tick, 18000);
+    // watchlist quotes on a gentler cadence, only while visible
+    setInterval(() => {
+      if (!document.hidden && !$('.layout').classList.contains('wl-collapsed')) refreshWatchQuotes();
+    }, 30000);
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) tick();
     });

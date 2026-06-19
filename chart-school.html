@@ -110,17 +110,18 @@ body {
 .layout {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 400px;
+  grid-template-columns: 1fr 380px 232px;
   min-height: 0;
   position: relative;
 }
-.layout.sb-collapsed { grid-template-columns: 1fr 0; }
+.layout.sb-collapsed { grid-template-columns: 1fr 0 232px; }
+.layout.wl-collapsed { grid-template-columns: 1fr 380px 0; }
+.layout.sb-collapsed.wl-collapsed { grid-template-columns: 1fr 0 0; }
 .layout.sb-collapsed .tutor-pane { display: none; }
+.layout.wl-collapsed .wl-pane { display: none; }
 .tab-collapse { margin-left: auto; font-weight: 700; }
-.sidebar-reopen {
+.sidebar-reopen, .wl-reopen {
   position: absolute;
-  top: 12px;
-  right: 0;
   z-index: 6;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -132,7 +133,95 @@ body {
   border-radius: 8px 0 0 8px;
   cursor: pointer;
 }
-.sidebar-reopen:hover { border-color: var(--accent); color: var(--accent); }
+.sidebar-reopen { top: 12px; right: 232px; }
+.layout.wl-collapsed .sidebar-reopen { right: 0; }
+.wl-reopen { top: 54px; right: 0; }
+.sidebar-reopen:hover, .wl-reopen:hover { border-color: var(--accent); color: var(--accent); }
+
+/* right-edge watchlist (TradingView-style) */
+.wl-pane {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  min-height: 0;
+  min-width: 0;
+}
+.wl-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.wl-title { font-size: 13px; font-weight: 700; color: var(--text); margin-right: auto; }
+.wl-icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 5px;
+  line-height: 1;
+}
+.wl-icon-btn:hover { color: var(--text); background: rgba(120, 150, 230, 0.14); }
+.wl-add2 { padding: 8px 10px 6px; }
+.wl-add2 input {
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 12.5px;
+  padding: 7px 9px;
+}
+.wl-cols {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  padding: 4px 12px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.wl-list { flex: 1; overflow-y: auto; min-height: 0; }
+.wl-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  position: relative;
+}
+.wl-row:hover { background: var(--panel-2); }
+.wl-row.active { background: rgba(91, 140, 255, 0.12); box-shadow: inset 3px 0 0 var(--accent); }
+.wl-sym { font-weight: 700; font-size: 13px; color: var(--text); }
+.wl-last { font-size: 12.5px; color: var(--text); font-variant-numeric: tabular-nums; }
+.wl-chg { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 52px; text-align: right; }
+.wl-chg.pos { color: #2ad19b; }
+.wl-chg.neg { color: #ff6478; }
+.wl-chg.flat { color: var(--muted); }
+.wl-row-x {
+  position: absolute;
+  right: 6px;
+  background: var(--panel);
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+  border-radius: 4px;
+  opacity: 0;
+}
+.wl-row:hover .wl-row-x { opacity: 1; }
+.wl-row-x:hover { color: var(--down); }
+.wl-note { font-size: 10.5px; color: var(--muted); padding: 8px 12px; border-top: 1px solid var(--border); }
 .chart-pane {
   display: flex;
   flex-direction: row;
@@ -696,9 +785,12 @@ body {
 /* ---------- responsive ---------- */
 @media (max-width: 920px) {
   body { overflow: auto; }
-  .layout { grid-template-columns: 1fr; }
+  .layout, .layout.sb-collapsed, .layout.wl-collapsed { grid-template-columns: 1fr; }
   .chart-pane { border-right: none; border-bottom: 1px solid var(--border); height: 56vh; }
   .tutor-pane { height: auto; }
+  .wl-pane { height: auto; border-left: none; border-top: 1px solid var(--border); }
+  .wl-list { max-height: 320px; }
+  .sidebar-reopen, .wl-reopen { display: none !important; }
   .quote { margin-left: 0; }
 }
 
@@ -996,7 +1088,23 @@ body {
         <p class="ctrl-note">Full-market heat map: <a href="https://finviz.com/map.ashx" target="_blank" rel="noopener">finviz.com/map</a></p>
       </div>
     </aside>
+
+    <aside class="wl-pane" id="wlPane">
+      <div class="wl-head">
+        <span class="wl-title">★ Watchlist</span>
+        <button id="wlRefresh" class="wl-icon-btn" title="Refresh quotes" aria-label="Refresh quotes">↻</button>
+        <button id="wlCollapse" class="wl-icon-btn" title="Hide watchlist" aria-label="Hide watchlist">⟩</button>
+      </div>
+      <div class="wl-add2">
+        <input id="wlRailInput" type="text" maxlength="12" placeholder="+ Add symbol" spellcheck="false" aria-label="Add symbol to watchlist" />
+      </div>
+      <div class="wl-cols"><span>Symbol</span><span>Last</span><span>Chg%</span></div>
+      <div id="wlRailList" class="wl-list"></div>
+      <p class="wl-note">Click a row to load it. Live quotes refresh automatically.</p>
+    </aside>
+
     <button id="sidebarReopen" class="sidebar-reopen" title="Open the analysis panel" aria-label="Open panel" style="display:none">‹ Panel</button>
+    <button id="wlReopen" class="wl-reopen" title="Open the watchlist" aria-label="Open watchlist" style="display:none">★</button>
   </main>
 
   <div id="toast" class="toast"></div>
@@ -5256,6 +5364,7 @@ body {
       chart.loadDrawings(drawingsFor(state.symbol));
       renderHeader();
       markUpdated(data);
+      updateWatchActive();
       // Always show the EMA/SMA suite on the trading chart (lessons set their own).
       if (state.view !== 'lessons') applyExplore(true);
       renderCurrentView();
@@ -5273,6 +5382,7 @@ body {
     chart.setData(data);
     renderHeader();
     markUpdated(data);
+    updateWatchActive();
     if (state.view !== 'lessons') applyExplore(true);
     renderCurrentView();
   }
@@ -5782,9 +5892,7 @@ body {
       const chip = el('span', 'wl-chip', `${sym}<button class="wl-x" data-sym="${sym}" aria-label="remove">×</button>`);
       chip.querySelector('.wl-x').addEventListener('click', (e) => {
         e.stopPropagation();
-        state.watchlist = state.watchlist.filter((s) => s !== sym);
-        renderWatchlist();
-        save();
+        removeWatch(sym);
       });
       chip.addEventListener('click', () => loadSymbol(sym));
       box.appendChild(chip);
@@ -5792,11 +5900,75 @@ body {
   }
   function addWatch(sym) {
     sym = (sym || '').toUpperCase().trim().slice(0, 12);
+    const ri = $('#wlRailInput');
+    const si = $('#wlInput');
+    if (ri) ri.value = '';
+    if (si) si.value = '';
     if (!sym || state.watchlist.includes(sym)) return;
     state.watchlist.push(sym);
-    $('#wlInput').value = '';
     renderWatchlist();
+    renderWatchRail();
     save();
+    if (location.protocol !== 'file:')
+      window.MarketData
+        .quote(sym)
+        .then((q) => {
+          if (q && isFinite(q.price)) {
+            _wlQuotes[sym] = q;
+            renderWatchRail();
+          }
+        })
+        .catch(() => {});
+  }
+  function removeWatch(sym) {
+    state.watchlist = state.watchlist.filter((s) => s !== sym);
+    renderWatchlist();
+    renderWatchRail();
+    save();
+  }
+
+  // ---- right-edge watchlist rail (live quotes) -----------------------------
+  const _wlQuotes = {}; // sym -> { price, changePct }
+  function renderWatchRail() {
+    const list = $('#wlRailList');
+    if (!list) return;
+    list.innerHTML = '';
+    state.watchlist.forEach((sym) => {
+      const q = _wlQuotes[sym];
+      const chg = q && isFinite(q.changePct) ? q.changePct : null;
+      const cls = chg == null ? 'flat' : chg >= 0 ? 'pos' : 'neg';
+      const last = q && isFinite(q.price) ? q.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+      const chgTxt = chg == null ? '—' : `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`;
+      const row = el('div', 'wl-row' + (sym === state.symbol ? ' active' : ''));
+      row.dataset.sym = sym;
+      row.innerHTML = `<span class="wl-sym">${sym}</span><span class="wl-last">${last}</span><span class="wl-chg ${cls}">${chgTxt}</span><button class="wl-row-x" title="remove" aria-label="remove">×</button>`;
+      row.addEventListener('click', () => loadSymbol(sym));
+      row.querySelector('.wl-row-x').addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeWatch(sym);
+      });
+      list.appendChild(row);
+    });
+  }
+  function updateWatchActive() {
+    document.querySelectorAll('#wlRailList .wl-row').forEach((r) => r.classList.toggle('active', r.dataset.sym === state.symbol));
+  }
+  let _wlRefreshing = false;
+  async function refreshWatchQuotes() {
+    if (_wlRefreshing || location.protocol === 'file:' || !state.watchlist.length) return;
+    _wlRefreshing = true;
+    try {
+      await mapPool(state.watchlist.slice(), 4, async (sym) => {
+        try {
+          const q = await window.MarketData.quote(sym);
+          if (q && isFinite(q.price)) _wlQuotes[sym] = q;
+        } catch (_) {}
+        return null;
+      });
+      renderWatchRail();
+    } finally {
+      _wlRefreshing = false;
+    }
   }
   // concurrency-limited async map
   async function mapPool(items, limit, fn, onProgress) {
@@ -6423,6 +6595,7 @@ body {
 
     bindDrawTools();
     bindSidebar();
+    bindWatchRail();
 
     // error overlay actions
     $('#errRetry').addEventListener('click', () => loadSymbol(state.symbol));
@@ -6472,6 +6645,24 @@ body {
     reopen.addEventListener('click', () => setCollapsed(false));
   }
 
+  // Wire the right-edge watchlist (add, refresh, collapse) + initial render.
+  function bindWatchRail() {
+    const layout = $('.layout');
+    const reopen = $('#wlReopen');
+    if (!layout || !reopen || !$('#wlPane')) return;
+    $('#wlRailInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') addWatch(e.target.value);
+    });
+    $('#wlRefresh').addEventListener('click', refreshWatchQuotes);
+    const setCollapsed = (on) => {
+      layout.classList.toggle('wl-collapsed', on);
+      reopen.style.display = on ? 'block' : 'none';
+    };
+    $('#wlCollapse').addEventListener('click', () => setCollapsed(true));
+    reopen.addEventListener('click', () => setCollapsed(false));
+    renderWatchRail();
+  }
+
   // ---- boot ----------------------------------------------------------------
   async function boot() {
     restore();
@@ -6486,11 +6677,16 @@ body {
     });
 
     await loadSymbol(state.symbol); // also renders the current view (lessons/explore/signals)
+    refreshWatchQuotes();
 
     // live auto-refresh every ~18s (gentle; server also caches): intraday views
     // re-fetch the full chart, daily views just refresh the live quote price.
     const tick = () => (/(m|h)$/.test(state.interval) ? refreshLive() : refreshQuote());
     setInterval(tick, 18000);
+    // watchlist quotes on a gentler cadence, only while visible
+    setInterval(() => {
+      if (!document.hidden && !$('.layout').classList.contains('wl-collapsed')) refreshWatchQuotes();
+    }, 30000);
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) tick();
     });
