@@ -233,6 +233,7 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  position: relative;
 }
 
 /* left drawing-tool rail (TradingView-style) */
@@ -303,6 +304,40 @@ body {
   transition: color 0.12s, border-color 0.12s;
 }
 .tf-meta:hover { color: var(--text); border-color: var(--accent); }
+.tf-div { width: 1px; height: 18px; background: var(--border); margin: 0 6px; }
+.tf-ind { color: var(--text); }
+.tf-ind.on { background: rgba(91, 140, 255, 0.18); color: var(--accent); border-color: rgba(91, 140, 255, 0.5); }
+
+/* indicators / chart-style popover (anchored under the toolbar) */
+.ind-pop {
+  position: absolute;
+  top: 42px;
+  left: 8px;
+  z-index: 20;
+  width: 320px;
+  max-height: calc(100% - 56px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+.ind-pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.ind-pop-x { background: none; border: none; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; }
+.ind-pop-x:hover { color: var(--text); }
+.ind-pop-body { padding: 6px 14px 14px; overflow-y: auto; min-height: 0; }
+.ind-pop-body .control-group { margin-top: 12px; }
+.ind-pop-body .control-group:first-child { margin-top: 4px; }
 
 .chart-host {
   flex: 1;
@@ -886,8 +921,74 @@ body {
         <button class="tf-btn active" data-range="1y" title="1 year · daily bars">1Y</button>
         <button class="tf-btn" data-range="5y" title="5 years · weekly bars">5Y</button>
         <button class="tf-btn" data-range="max" title="Max · monthly bars">All</button>
+        <span class="tf-div"></span>
+        <button class="tf-meta tf-ind" id="indicatorsBtn" title="Indicators, moving averages & chart style">ƒ Indicators</button>
         <span class="tf-spacer"></span>
         <button class="tf-meta" id="csvExportBtn" title="Download the visible candles as a CSV file">⤓ CSV</button>
+      </div>
+      <div id="indicatorsPanel" class="ind-pop" style="display:none">
+        <div class="ind-pop-head">
+          <span>Indicators &amp; chart style</span>
+          <button id="indicatorsClose" class="ind-pop-x" aria-label="close">×</button>
+        </div>
+        <div class="ind-pop-body">
+          <div class="control-group">
+            <h3>Chart type</h3>
+            <label class="switch"><input type="checkbox" data-toggle="mode" /><span>Line instead of candles</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="log" /><span>Logarithmic price scale</span></label>
+          </div>
+
+          <div class="control-group">
+            <h3>Moving averages <small>(on by default)</small></h3>
+            <label class="switch"><input type="checkbox" data-toggle="emaband" checked /><span><i class="dot" style="background:linear-gradient(90deg,#2ec27e,#46b3ff)"></i>EMA 9/21 ribbon</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="ema9" /><span><i class="dot" style="background:#2ec27e"></i>EMA 9 line</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="ema21" /><span><i class="dot" style="background:#46b3ff"></i>EMA 21 line</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="ema50" checked /><span><i class="dot" style="background:#b083ff"></i>EMA 50</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="ma20" checked /><span><i class="dot" style="background:#9be36b"></i>SMA 20</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="ma50" checked /><span><i class="dot" style="background:#5b8cff"></i>SMA 50</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="ma100" checked /><span><i class="dot" style="background:#ffb020"></i>SMA 100</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="ma200" checked /><span><i class="dot" style="background:#e0566a"></i>SMA 200</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="fibema" /><span><i class="dot" style="background:linear-gradient(90deg,#2ee6a0,#46c9ff,#b083ff,#e0566a)"></i>Fibonacci EMA ribbon (8·13·21·34·55)</span></label>
+          </div>
+
+          <div class="control-group">
+            <h3>Indicators</h3>
+            <label class="switch"><input type="checkbox" data-toggle="bb" /><span>Bollinger Bands (20, 2)</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="vwap" /><span><i class="dot" style="background:#ffd166"></i>VWAP (intraday)</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="rsi" /><span>RSI (14)</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="macd" /><span>MACD (12, 26, 9)</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="fib" /><span><i class="dot" style="background:rgba(255,200,90,0.85)"></i>Fibonacci retracement (auto swing)</span></label>
+          </div>
+
+          <div class="control-group">
+            <h3>Panels &amp; levels</h3>
+            <label class="switch"><input type="checkbox" data-toggle="volume" checked /><span>Volume</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="volprofile" /><span><i class="dot" style="background:rgba(90,140,255,0.85)"></i>Volume Profile (visible range)</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="sr" /><span>Auto support/resistance zones</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="ew" /><span>🌊 Elliott Wave auto-count (beta)</span></label>
+            <div id="ewControls" class="ew-controls" style="display:none">
+              <div class="ew-slider-row">
+                <span>Wave sensitivity</span>
+                <b id="ewSensVal">auto</b>
+              </div>
+              <div class="ew-slider-row">
+                <input id="ewSensitivity" type="range" min="3" max="25" step="1" value="8" />
+                <button id="ewAutoBtn" class="ew-auto-btn">Auto</button>
+              </div>
+              <p class="ctrl-note">Lower % = finer sub-waves; higher % = bigger-degree structure.</p>
+            </div>
+          </div>
+
+          <div id="ewRead" class="ew-read" style="display:none"></div>
+
+          <div class="control-group">
+            <h3>Data accuracy</h3>
+            <label class="switch"><input type="checkbox" id="adjustedToggle" /><span>Adjusted for splits &amp; dividends</span></label>
+            <p class="ctrl-note">Off = raw prices (matches Yahoo's candles). On = back-adjusted, ideal for long-term comparisons.</p>
+          </div>
+
+          <button id="resetViewBtn" class="btn-ghost wide">Reset zoom / pan</button>
+        </div>
       </div>
       <div id="sampleBanner" class="sample-banner" style="display:none">
         ⚠ Showing <b>SAMPLE data — NOT live or real</b>. Start the local server
@@ -958,65 +1059,9 @@ body {
 
       <!-- EXPLORE -->
       <div id="exploreView" class="tutor-view" style="display:none">
-        <p class="explore-intro">Free sandbox — toggle indicators on the live chart and
-          practise what you learned. Everything is computed from real data.</p>
-
-        <div class="control-group">
-          <h3>Chart type</h3>
-          <label class="switch"><input type="checkbox" data-toggle="mode" /><span>Line instead of candles</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="log" /><span>Logarithmic price scale</span></label>
-        </div>
-
-        <div class="control-group">
-          <h3>Moving averages <small>(on by default)</small></h3>
-          <label class="switch"><input type="checkbox" data-toggle="emaband" checked /><span><i class="dot" style="background:linear-gradient(90deg,#2ec27e,#46b3ff)"></i>EMA 9/21 ribbon</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ema9" /><span><i class="dot" style="background:#2ec27e"></i>EMA 9 line</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ema21" /><span><i class="dot" style="background:#46b3ff"></i>EMA 21 line</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ema50" checked /><span><i class="dot" style="background:#b083ff"></i>EMA 50</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ma20" checked /><span><i class="dot" style="background:#9be36b"></i>SMA 20</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ma50" checked /><span><i class="dot" style="background:#5b8cff"></i>SMA 50</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ma100" checked /><span><i class="dot" style="background:#ffb020"></i>SMA 100</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ma200" checked /><span><i class="dot" style="background:#e0566a"></i>SMA 200</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="fibema" /><span><i class="dot" style="background:linear-gradient(90deg,#2ee6a0,#46c9ff,#b083ff,#e0566a)"></i>Fibonacci EMA ribbon (8·13·21·34·55)</span></label>
-        </div>
-
-        <div class="control-group">
-          <h3>Indicators</h3>
-          <label class="switch"><input type="checkbox" data-toggle="bb" /><span>Bollinger Bands (20, 2)</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="vwap" /><span><i class="dot" style="background:#ffd166"></i>VWAP (intraday)</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="rsi" /><span>RSI (14)</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="macd" /><span>MACD (12, 26, 9)</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="fib" /><span><i class="dot" style="background:rgba(255,200,90,0.85)"></i>Fibonacci retracement (auto swing)</span></label>
-        </div>
-
-        <div class="control-group">
-          <h3>Panels & levels</h3>
-          <label class="switch"><input type="checkbox" data-toggle="volume" checked /><span>Volume</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="volprofile" /><span><i class="dot" style="background:rgba(90,140,255,0.85)"></i>Volume Profile (visible range)</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="sr" /><span>Auto support/resistance zones</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ew" /><span>🌊 Elliott Wave auto-count (beta)</span></label>
-          <div id="ewControls" class="ew-controls" style="display:none">
-            <div class="ew-slider-row">
-              <span>Wave sensitivity</span>
-              <b id="ewSensVal">auto</b>
-            </div>
-            <div class="ew-slider-row">
-              <input id="ewSensitivity" type="range" min="3" max="25" step="1" value="8" />
-              <button id="ewAutoBtn" class="ew-auto-btn">Auto</button>
-            </div>
-            <p class="ctrl-note">Lower % = finer sub-waves; higher % = bigger-degree structure.</p>
-          </div>
-        </div>
-
-        <div id="ewRead" class="ew-read" style="display:none"></div>
-
-        <div class="control-group">
-          <h3>Data accuracy</h3>
-          <label class="switch"><input type="checkbox" id="adjustedToggle" /><span>Adjusted for splits &amp; dividends</span></label>
-          <p class="ctrl-note">Off = raw prices (matches Yahoo's candles). On = back-adjusted, ideal for long-term comparisons.</p>
-        </div>
-
-        <button id="resetViewBtn" class="btn-ghost wide">Reset zoom / pan</button>
+        <p class="explore-intro">Chart controls live in the <b>ƒ Indicators</b> button at the top of
+          the chart — moving averages, indicators, volume profile, Elliott Wave and more. This tab
+          is a quick reference while you learn. Everything is computed from real data.</p>
 
         <div class="explore-legend">
           <h3>Cheat sheet</h3>
@@ -2107,8 +2152,14 @@ body {
       const e = Math.min(this.candles.length, s + this.visCount);
       return { s, e };
     }
+    // Empty breathing room kept to the right of the latest bar (TradingView-style
+    // right offset). A touch wider when the volume profile needs a gutter so its
+    // histogram sits beside the candles instead of bleeding over them.
+    _marginFrac() {
+      return this.flags.volProfile ? 0.14 : 0.05;
+    }
     _step(rect) {
-      return rect.w / this.visCount;
+      return rect.w / (this.visCount * (1 + this._marginFrac()));
     }
     _xOf(i, rect) {
       return rect.x + (i - this.visStart + 0.5) * this._step(rect);
@@ -2619,31 +2670,35 @@ body {
         }
       });
       if (maxV <= 0) return;
-      const profW = L.price.w * 0.3;
       const xRight = L.price.x + L.price.w;
+      // Confine the histogram to the empty gutter on the right (the breathing room
+      // _marginFrac reserves) so it sits beside the candles, not over them.
+      const lastX = this._xOf(e - 1, L.price) + this._step(L.price) * 0.5;
+      const gutter = Math.max(46, xRight - lastX);
+      const profW = gutter * 0.94;
       const rowH = L.price.h / rows;
       ctx.save();
       for (let b = 0; b < rows; b++) {
         const w = (bins[b] / maxV) * profW;
         if (w < 0.5) continue;
         const y = L.price.y + L.price.h - (b + 1) * rowH;
-        ctx.fillStyle = b === pocBin ? 'rgba(255,184,80,0.45)' : 'rgba(90,140,255,0.26)';
+        ctx.fillStyle = b === pocBin ? 'rgba(255,184,80,0.34)' : 'rgba(90,140,255,0.20)';
         ctx.fillRect(xRight - w, y + 0.5, w, rowH - 1);
       }
-      // Point of Control line
+      // Point of Control: a thin dashed level across the chart (a key magnet price).
       const pocY = L.price.y + L.price.h - (pocBin + 0.5) * rowH;
-      ctx.strokeStyle = 'rgba(255,184,80,0.7)';
-      ctx.setLineDash([5, 4]);
+      ctx.strokeStyle = 'rgba(255,184,80,0.5)';
+      ctx.setLineDash([4, 5]);
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(L.price.x, pocY);
       ctx.lineTo(xRight, pocY);
       ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = 'rgba(255,184,80,0.95)';
+      ctx.fillStyle = 'rgba(255,184,80,0.9)';
       ctx.font = '10px system-ui, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText('POC', L.price.x + 4, pocY - 3);
+      ctx.textAlign = 'right';
+      ctx.fillText('POC', xRight - 3, pocY - 3);
       ctx.restore();
     }
 
@@ -5283,7 +5338,8 @@ body {
     adjusted: false,
     lessonIdx: 0,
     stepIdx: 0,
-    view: 'lessons',
+    view: 'explore',
+    sbCollapsed: true, // chart-dominant by default (analysis panel hidden)
     explore: { mode: 'candles', emaband: true, ema9: false, ema21: false, ema50: true, ma20: true, ma50: true, ma100: true, ma200: true, fibema: false, bb: false, vwap: false, volprofile: false, volume: true, rsi: false, macd: false, sr: false, fib: false, log: false, ew: false, ewPct: null }
   };
 
@@ -5297,7 +5353,7 @@ body {
     try {
       localStorage.setItem(
         LS_KEY,
-        JSON.stringify({ symbol: state.symbol, lessonIdx: state.lessonIdx, stepIdx: state.stepIdx, view: state.view, watchlist: state.watchlist })
+        JSON.stringify({ symbol: state.symbol, lessonIdx: state.lessonIdx, stepIdx: state.stepIdx, view: state.view, sbCollapsed: state.sbCollapsed, watchlist: state.watchlist })
       );
     } catch (_) {}
   }
@@ -5308,6 +5364,9 @@ body {
       if (Number.isInteger(s.lessonIdx)) state.lessonIdx = s.lessonIdx;
       if (Number.isInteger(s.stepIdx)) state.stepIdx = s.stepIdx;
       if (s.view) state.view = s.view;
+      // chart-dominant unless the user explicitly opened the panel before
+      state.sbCollapsed = s.sbCollapsed !== false;
+      if (state.sbCollapsed) state.view = 'explore';
       if (Array.isArray(s.watchlist) && s.watchlist.length) state.watchlist = s.watchlist;
     } catch (_) {}
   }
@@ -6596,6 +6655,7 @@ body {
     bindDrawTools();
     bindSidebar();
     bindWatchRail();
+    bindIndicatorsPanel();
 
     // error overlay actions
     $('#errRetry').addEventListener('click', () => loadSymbol(state.symbol));
@@ -6632,17 +6692,55 @@ body {
   }
 
   // Collapse the analysis panel for a full-width, TradingView-style chart.
+  // Collapsed → the chart shows the indicator suite; open → the selected tab.
   function bindSidebar() {
     const layout = $('.layout');
     const reopen = $('#sidebarReopen');
     const toggle = $('#sidebarToggle');
     if (!layout || !reopen || !toggle) return;
-    const setCollapsed = (on) => {
-      layout.classList.toggle('sb-collapsed', on);
-      reopen.style.display = on ? 'block' : 'none';
+    const apply = () => {
+      layout.classList.toggle('sb-collapsed', state.sbCollapsed);
+      reopen.style.display = state.sbCollapsed ? 'block' : 'none';
     };
-    toggle.addEventListener('click', () => setCollapsed(true));
-    reopen.addEventListener('click', () => setCollapsed(false));
+    toggle.addEventListener('click', () => {
+      state.sbCollapsed = true;
+      state.view = 'explore';
+      apply();
+      syncTabs();
+      applyExplore(true);
+      save();
+    });
+    reopen.addEventListener('click', () => {
+      state.sbCollapsed = false;
+      if (state.view === 'explore') state.view = 'lessons';
+      apply();
+      syncTabs();
+      renderCurrentView();
+      save();
+    });
+    apply();
+  }
+
+  // The "ƒ Indicators" toolbar popover (chart controls live here, TV-style).
+  function bindIndicatorsPanel() {
+    const btn = $('#indicatorsBtn');
+    const pop = $('#indicatorsPanel');
+    if (!btn || !pop) return;
+    const setOpen = (open) => {
+      pop.style.display = open ? 'flex' : 'none';
+      btn.classList.toggle('on', open);
+    };
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setOpen(pop.style.display === 'none');
+    });
+    $('#indicatorsClose').addEventListener('click', () => setOpen(false));
+    document.addEventListener('click', (e) => {
+      if (pop.style.display !== 'none' && !pop.contains(e.target) && e.target !== btn) setOpen(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && pop.style.display !== 'none') setOpen(false);
+    });
   }
 
   // Wire the right-edge watchlist (add, refresh, collapse) + initial render.

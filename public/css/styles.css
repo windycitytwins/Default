@@ -222,6 +222,7 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  position: relative;
 }
 
 /* left drawing-tool rail (TradingView-style) */
@@ -292,6 +293,40 @@ body {
   transition: color 0.12s, border-color 0.12s;
 }
 .tf-meta:hover { color: var(--text); border-color: var(--accent); }
+.tf-div { width: 1px; height: 18px; background: var(--border); margin: 0 6px; }
+.tf-ind { color: var(--text); }
+.tf-ind.on { background: rgba(91, 140, 255, 0.18); color: var(--accent); border-color: rgba(91, 140, 255, 0.5); }
+
+/* indicators / chart-style popover (anchored under the toolbar) */
+.ind-pop {
+  position: absolute;
+  top: 42px;
+  left: 8px;
+  z-index: 20;
+  width: 320px;
+  max-height: calc(100% - 56px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+.ind-pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.ind-pop-x { background: none; border: none; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; }
+.ind-pop-x:hover { color: var(--text); }
+.ind-pop-body { padding: 6px 14px 14px; overflow-y: auto; min-height: 0; }
+.ind-pop-body .control-group { margin-top: 12px; }
+.ind-pop-body .control-group:first-child { margin-top: 4px; }
 
 .chart-host {
   flex: 1;

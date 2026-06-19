@@ -355,8 +355,14 @@
       const e = Math.min(this.candles.length, s + this.visCount);
       return { s, e };
     }
+    // Empty breathing room kept to the right of the latest bar (TradingView-style
+    // right offset). A touch wider when the volume profile needs a gutter so its
+    // histogram sits beside the candles instead of bleeding over them.
+    _marginFrac() {
+      return this.flags.volProfile ? 0.14 : 0.05;
+    }
     _step(rect) {
-      return rect.w / this.visCount;
+      return rect.w / (this.visCount * (1 + this._marginFrac()));
     }
     _xOf(i, rect) {
       return rect.x + (i - this.visStart + 0.5) * this._step(rect);
@@ -867,31 +873,35 @@
         }
       });
       if (maxV <= 0) return;
-      const profW = L.price.w * 0.3;
       const xRight = L.price.x + L.price.w;
+      // Confine the histogram to the empty gutter on the right (the breathing room
+      // _marginFrac reserves) so it sits beside the candles, not over them.
+      const lastX = this._xOf(e - 1, L.price) + this._step(L.price) * 0.5;
+      const gutter = Math.max(46, xRight - lastX);
+      const profW = gutter * 0.94;
       const rowH = L.price.h / rows;
       ctx.save();
       for (let b = 0; b < rows; b++) {
         const w = (bins[b] / maxV) * profW;
         if (w < 0.5) continue;
         const y = L.price.y + L.price.h - (b + 1) * rowH;
-        ctx.fillStyle = b === pocBin ? 'rgba(255,184,80,0.45)' : 'rgba(90,140,255,0.26)';
+        ctx.fillStyle = b === pocBin ? 'rgba(255,184,80,0.34)' : 'rgba(90,140,255,0.20)';
         ctx.fillRect(xRight - w, y + 0.5, w, rowH - 1);
       }
-      // Point of Control line
+      // Point of Control: a thin dashed level across the chart (a key magnet price).
       const pocY = L.price.y + L.price.h - (pocBin + 0.5) * rowH;
-      ctx.strokeStyle = 'rgba(255,184,80,0.7)';
-      ctx.setLineDash([5, 4]);
+      ctx.strokeStyle = 'rgba(255,184,80,0.5)';
+      ctx.setLineDash([4, 5]);
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(L.price.x, pocY);
       ctx.lineTo(xRight, pocY);
       ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = 'rgba(255,184,80,0.95)';
+      ctx.fillStyle = 'rgba(255,184,80,0.9)';
       ctx.font = '10px system-ui, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText('POC', L.price.x + 4, pocY - 3);
+      ctx.textAlign = 'right';
+      ctx.fillText('POC', xRight - 3, pocY - 3);
       ctx.restore();
     }
 

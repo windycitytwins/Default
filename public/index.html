@@ -98,8 +98,74 @@
         <button class="tf-btn active" data-range="1y" title="1 year · daily bars">1Y</button>
         <button class="tf-btn" data-range="5y" title="5 years · weekly bars">5Y</button>
         <button class="tf-btn" data-range="max" title="Max · monthly bars">All</button>
+        <span class="tf-div"></span>
+        <button class="tf-meta tf-ind" id="indicatorsBtn" title="Indicators, moving averages & chart style">ƒ Indicators</button>
         <span class="tf-spacer"></span>
         <button class="tf-meta" id="csvExportBtn" title="Download the visible candles as a CSV file">⤓ CSV</button>
+      </div>
+      <div id="indicatorsPanel" class="ind-pop" style="display:none">
+        <div class="ind-pop-head">
+          <span>Indicators &amp; chart style</span>
+          <button id="indicatorsClose" class="ind-pop-x" aria-label="close">×</button>
+        </div>
+        <div class="ind-pop-body">
+          <div class="control-group">
+            <h3>Chart type</h3>
+            <label class="switch"><input type="checkbox" data-toggle="mode" /><span>Line instead of candles</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="log" /><span>Logarithmic price scale</span></label>
+          </div>
+
+          <div class="control-group">
+            <h3>Moving averages <small>(on by default)</small></h3>
+            <label class="switch"><input type="checkbox" data-toggle="emaband" checked /><span><i class="dot" style="background:linear-gradient(90deg,#2ec27e,#46b3ff)"></i>EMA 9/21 ribbon</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="ema9" /><span><i class="dot" style="background:#2ec27e"></i>EMA 9 line</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="ema21" /><span><i class="dot" style="background:#46b3ff"></i>EMA 21 line</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="ema50" checked /><span><i class="dot" style="background:#b083ff"></i>EMA 50</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="ma20" checked /><span><i class="dot" style="background:#9be36b"></i>SMA 20</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="ma50" checked /><span><i class="dot" style="background:#5b8cff"></i>SMA 50</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="ma100" checked /><span><i class="dot" style="background:#ffb020"></i>SMA 100</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="ma200" checked /><span><i class="dot" style="background:#e0566a"></i>SMA 200</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="fibema" /><span><i class="dot" style="background:linear-gradient(90deg,#2ee6a0,#46c9ff,#b083ff,#e0566a)"></i>Fibonacci EMA ribbon (8·13·21·34·55)</span></label>
+          </div>
+
+          <div class="control-group">
+            <h3>Indicators</h3>
+            <label class="switch"><input type="checkbox" data-toggle="bb" /><span>Bollinger Bands (20, 2)</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="vwap" /><span><i class="dot" style="background:#ffd166"></i>VWAP (intraday)</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="rsi" /><span>RSI (14)</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="macd" /><span>MACD (12, 26, 9)</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="fib" /><span><i class="dot" style="background:rgba(255,200,90,0.85)"></i>Fibonacci retracement (auto swing)</span></label>
+          </div>
+
+          <div class="control-group">
+            <h3>Panels &amp; levels</h3>
+            <label class="switch"><input type="checkbox" data-toggle="volume" checked /><span>Volume</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="volprofile" /><span><i class="dot" style="background:rgba(90,140,255,0.85)"></i>Volume Profile (visible range)</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="sr" /><span>Auto support/resistance zones</span></label>
+            <label class="switch"><input type="checkbox" data-toggle="ew" /><span>🌊 Elliott Wave auto-count (beta)</span></label>
+            <div id="ewControls" class="ew-controls" style="display:none">
+              <div class="ew-slider-row">
+                <span>Wave sensitivity</span>
+                <b id="ewSensVal">auto</b>
+              </div>
+              <div class="ew-slider-row">
+                <input id="ewSensitivity" type="range" min="3" max="25" step="1" value="8" />
+                <button id="ewAutoBtn" class="ew-auto-btn">Auto</button>
+              </div>
+              <p class="ctrl-note">Lower % = finer sub-waves; higher % = bigger-degree structure.</p>
+            </div>
+          </div>
+
+          <div id="ewRead" class="ew-read" style="display:none"></div>
+
+          <div class="control-group">
+            <h3>Data accuracy</h3>
+            <label class="switch"><input type="checkbox" id="adjustedToggle" /><span>Adjusted for splits &amp; dividends</span></label>
+            <p class="ctrl-note">Off = raw prices (matches Yahoo's candles). On = back-adjusted, ideal for long-term comparisons.</p>
+          </div>
+
+          <button id="resetViewBtn" class="btn-ghost wide">Reset zoom / pan</button>
+        </div>
       </div>
       <div id="sampleBanner" class="sample-banner" style="display:none">
         ⚠ Showing <b>SAMPLE data — NOT live or real</b>. Start the local server
@@ -170,65 +236,9 @@
 
       <!-- EXPLORE -->
       <div id="exploreView" class="tutor-view" style="display:none">
-        <p class="explore-intro">Free sandbox — toggle indicators on the live chart and
-          practise what you learned. Everything is computed from real data.</p>
-
-        <div class="control-group">
-          <h3>Chart type</h3>
-          <label class="switch"><input type="checkbox" data-toggle="mode" /><span>Line instead of candles</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="log" /><span>Logarithmic price scale</span></label>
-        </div>
-
-        <div class="control-group">
-          <h3>Moving averages <small>(on by default)</small></h3>
-          <label class="switch"><input type="checkbox" data-toggle="emaband" checked /><span><i class="dot" style="background:linear-gradient(90deg,#2ec27e,#46b3ff)"></i>EMA 9/21 ribbon</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ema9" /><span><i class="dot" style="background:#2ec27e"></i>EMA 9 line</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ema21" /><span><i class="dot" style="background:#46b3ff"></i>EMA 21 line</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ema50" checked /><span><i class="dot" style="background:#b083ff"></i>EMA 50</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ma20" checked /><span><i class="dot" style="background:#9be36b"></i>SMA 20</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ma50" checked /><span><i class="dot" style="background:#5b8cff"></i>SMA 50</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ma100" checked /><span><i class="dot" style="background:#ffb020"></i>SMA 100</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ma200" checked /><span><i class="dot" style="background:#e0566a"></i>SMA 200</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="fibema" /><span><i class="dot" style="background:linear-gradient(90deg,#2ee6a0,#46c9ff,#b083ff,#e0566a)"></i>Fibonacci EMA ribbon (8·13·21·34·55)</span></label>
-        </div>
-
-        <div class="control-group">
-          <h3>Indicators</h3>
-          <label class="switch"><input type="checkbox" data-toggle="bb" /><span>Bollinger Bands (20, 2)</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="vwap" /><span><i class="dot" style="background:#ffd166"></i>VWAP (intraday)</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="rsi" /><span>RSI (14)</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="macd" /><span>MACD (12, 26, 9)</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="fib" /><span><i class="dot" style="background:rgba(255,200,90,0.85)"></i>Fibonacci retracement (auto swing)</span></label>
-        </div>
-
-        <div class="control-group">
-          <h3>Panels & levels</h3>
-          <label class="switch"><input type="checkbox" data-toggle="volume" checked /><span>Volume</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="volprofile" /><span><i class="dot" style="background:rgba(90,140,255,0.85)"></i>Volume Profile (visible range)</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="sr" /><span>Auto support/resistance zones</span></label>
-          <label class="switch"><input type="checkbox" data-toggle="ew" /><span>🌊 Elliott Wave auto-count (beta)</span></label>
-          <div id="ewControls" class="ew-controls" style="display:none">
-            <div class="ew-slider-row">
-              <span>Wave sensitivity</span>
-              <b id="ewSensVal">auto</b>
-            </div>
-            <div class="ew-slider-row">
-              <input id="ewSensitivity" type="range" min="3" max="25" step="1" value="8" />
-              <button id="ewAutoBtn" class="ew-auto-btn">Auto</button>
-            </div>
-            <p class="ctrl-note">Lower % = finer sub-waves; higher % = bigger-degree structure.</p>
-          </div>
-        </div>
-
-        <div id="ewRead" class="ew-read" style="display:none"></div>
-
-        <div class="control-group">
-          <h3>Data accuracy</h3>
-          <label class="switch"><input type="checkbox" id="adjustedToggle" /><span>Adjusted for splits &amp; dividends</span></label>
-          <p class="ctrl-note">Off = raw prices (matches Yahoo's candles). On = back-adjusted, ideal for long-term comparisons.</p>
-        </div>
-
-        <button id="resetViewBtn" class="btn-ghost wide">Reset zoom / pan</button>
+        <p class="explore-intro">Chart controls live in the <b>ƒ Indicators</b> button at the top of
+          the chart — moving averages, indicators, volume profile, Elliott Wave and more. This tab
+          is a quick reference while you learn. Everything is computed from real data.</p>
 
         <div class="explore-legend">
           <h3>Cheat sheet</h3>

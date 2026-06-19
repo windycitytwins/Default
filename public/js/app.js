@@ -23,7 +23,8 @@
     adjusted: false,
     lessonIdx: 0,
     stepIdx: 0,
-    view: 'lessons',
+    view: 'explore',
+    sbCollapsed: true, // chart-dominant by default (analysis panel hidden)
     explore: { mode: 'candles', emaband: true, ema9: false, ema21: false, ema50: true, ma20: true, ma50: true, ma100: true, ma200: true, fibema: false, bb: false, vwap: false, volprofile: false, volume: true, rsi: false, macd: false, sr: false, fib: false, log: false, ew: false, ewPct: null }
   };
 
@@ -37,7 +38,7 @@
     try {
       localStorage.setItem(
         LS_KEY,
-        JSON.stringify({ symbol: state.symbol, lessonIdx: state.lessonIdx, stepIdx: state.stepIdx, view: state.view, watchlist: state.watchlist })
+        JSON.stringify({ symbol: state.symbol, lessonIdx: state.lessonIdx, stepIdx: state.stepIdx, view: state.view, sbCollapsed: state.sbCollapsed, watchlist: state.watchlist })
       );
     } catch (_) {}
   }
@@ -48,6 +49,9 @@
       if (Number.isInteger(s.lessonIdx)) state.lessonIdx = s.lessonIdx;
       if (Number.isInteger(s.stepIdx)) state.stepIdx = s.stepIdx;
       if (s.view) state.view = s.view;
+      // chart-dominant unless the user explicitly opened the panel before
+      state.sbCollapsed = s.sbCollapsed !== false;
+      if (state.sbCollapsed) state.view = 'explore';
       if (Array.isArray(s.watchlist) && s.watchlist.length) state.watchlist = s.watchlist;
     } catch (_) {}
   }
@@ -1336,6 +1340,7 @@
     bindDrawTools();
     bindSidebar();
     bindWatchRail();
+    bindIndicatorsPanel();
 
     // error overlay actions
     $('#errRetry').addEventListener('click', () => loadSymbol(state.symbol));
@@ -1372,17 +1377,55 @@
   }
 
   // Collapse the analysis panel for a full-width, TradingView-style chart.
+  // Collapsed → the chart shows the indicator suite; open → the selected tab.
   function bindSidebar() {
     const layout = $('.layout');
     const reopen = $('#sidebarReopen');
     const toggle = $('#sidebarToggle');
     if (!layout || !reopen || !toggle) return;
-    const setCollapsed = (on) => {
-      layout.classList.toggle('sb-collapsed', on);
-      reopen.style.display = on ? 'block' : 'none';
+    const apply = () => {
+      layout.classList.toggle('sb-collapsed', state.sbCollapsed);
+      reopen.style.display = state.sbCollapsed ? 'block' : 'none';
     };
-    toggle.addEventListener('click', () => setCollapsed(true));
-    reopen.addEventListener('click', () => setCollapsed(false));
+    toggle.addEventListener('click', () => {
+      state.sbCollapsed = true;
+      state.view = 'explore';
+      apply();
+      syncTabs();
+      applyExplore(true);
+      save();
+    });
+    reopen.addEventListener('click', () => {
+      state.sbCollapsed = false;
+      if (state.view === 'explore') state.view = 'lessons';
+      apply();
+      syncTabs();
+      renderCurrentView();
+      save();
+    });
+    apply();
+  }
+
+  // The "ƒ Indicators" toolbar popover (chart controls live here, TV-style).
+  function bindIndicatorsPanel() {
+    const btn = $('#indicatorsBtn');
+    const pop = $('#indicatorsPanel');
+    if (!btn || !pop) return;
+    const setOpen = (open) => {
+      pop.style.display = open ? 'flex' : 'none';
+      btn.classList.toggle('on', open);
+    };
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setOpen(pop.style.display === 'none');
+    });
+    $('#indicatorsClose').addEventListener('click', () => setOpen(false));
+    document.addEventListener('click', (e) => {
+      if (pop.style.display !== 'none' && !pop.contains(e.target) && e.target !== btn) setOpen(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && pop.style.display !== 'none') setOpen(false);
+    });
   }
 
   // Wire the right-edge watchlist (add, refresh, collapse) + initial render.
